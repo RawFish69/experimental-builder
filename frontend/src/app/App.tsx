@@ -12,10 +12,10 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useShallow } from 'zustand/react/shallow';
-import { Hammer, Link2 } from 'lucide-react';
+import { Hammer, Link2, TreePine } from 'lucide-react';
 import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
-import { ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
+import { getClassFromWeaponType, ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
 import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE } from '@/domain/search/filter-schema';
 import { SearchWorkerClient } from '@/domain/search/search-worker-client';
@@ -28,8 +28,12 @@ import { getLegacyBuilderUrl } from '@/domain/build/legacy-open-link';
 import { useWorkbenchStore } from '@/domain/build/workbench-state';
 import type { WorkbenchStore } from '@/domain/build/workbench-state';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
-import { encodeWorkbenchSnapshot, parseSearchStateFromUrl, parseWorkbenchPatchFromUrl, parseUrlState, writeUrlState } from '@/app/url-state';
+import { encodeWorkbenchSnapshot, parseAbilityTreeStateFromUrl, parseSearchStateFromUrl, parseWorkbenchPatchFromUrl, parseUrlState, writeUrlState } from '@/app/url-state';
 import { AutoBuilderModal } from '@/features/autobuilder/AutoBuilderModal';
+import { AbilityTreeModal } from '@/features/abilitytree/AbilityTreeModal';
+import { abilityTreeCatalogService } from '@/domain/ability-tree/catalog-service';
+import { evaluateAbilityTree, getClassTree } from '@/domain/ability-tree/logic';
+import type { AbilityTreeDataset, AbilityTreeSelectionsByClass } from '@/domain/ability-tree/types';
 import { Button } from '@/components/ui';
 
 function copyText(value: string): Promise<void> {
@@ -103,6 +107,14 @@ export function App() {
   const [searchLoading, setSearchLoading] = useState(false);
   const [searchClientReady, setSearchClientReady] = useState(false);
   const [autoBuilderOpen, setAutoBuilderOpen] = useState(initialParsed?.mode === 'autobuilder');
+  const [abilityTreeOpen, setAbilityTreeOpen] = useState(initialParsed?.mode === 'abilitytree');
+  const [abilityTreeDataset, setAbilityTreeDataset] = useState<AbilityTreeDataset | null>(null);
+  const [abilityTreeLoading, setAbilityTreeLoading] = useState(false);
+  const [abilityTreeError, setAbilityTreeError] = useState<string | null>(null);
+  const [abilityTreeSelectionsByClass, setAbilityTreeSelectionsByClass] = useState<AbilityTreeSelectionsByClass>(
+    initialParsed?.abilityTree?.selectedByClass ?? {},
+  );
+  const [abilityTreeVersionHint, setAbilityTreeVersionHint] = useState<string | null>(initialParsed?.abilityTree?.version ?? null);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
   const searchClientRef = useRef<SearchWorkerClient | null>(null);
@@ -230,14 +242,45 @@ export function App() {
   }, [catalog, searchClientReady, searchState]);
 
   useEffect(() => {
+    if (!abilityTreeOpen || !catalog) return;
+    if (abilityTreeLoading || abilityTreeDataset || abilityTreeError) return;
+    let cancelled = false;
+    setAbilityTreeLoading(true);
+    setAbilityTreeError(null);
+    (async () => {
+      try {
+        const dataset = await abilityTreeCatalogService.getDataset(abilityTreeVersionHint || catalog.version);
+        if (cancelled) return;
+        setAbilityTreeDataset(dataset);
+        setAbilityTreeVersionHint(dataset.version);
+      } catch (error) {
+        if (cancelled) return;
+        console.error(error);
+        setAbilityTreeError(error instanceof Error ? error.message : 'Failed to load ability tree data');
+      } finally {
+        if (!cancelled) setAbilityTreeLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [abilityTreeOpen, abilityTreeDataset, catalog, abilityTreeVersionHint, abilityTreeError]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     if (writeUrlTimerRef.current) window.clearTimeout(writeUrlTimerRef.current);
     writeUrlTimerRef.current = window.setTimeout(() => {
       try {
+        const mode = autoBuilderOpen ? 'autobuilder' : abilityTreeOpen ? 'abilitytree' : null;
         writeUrlState({
           search: searchState,
           workbenchSnapshot: snapshot,
-          mode: autoBuilderOpen ? 'autobuilder' : null,
+          mode,
+          abilityTreeState: {
+            version: abilityTreeVersionHint,
+            selectedByClass: abilityTreeSelectionsByClass,
+          },
           replace: true,
         });
       } catch (error) {
@@ -247,7 +290,7 @@ export function App() {
     return () => {
       if (writeUrlTimerRef.current) window.clearTimeout(writeUrlTimerRef.current);
     };
-  }, [searchState, snapshot, autoBuilderOpen]);
+  }, [searchState, snapshot, autoBuilderOpen, abilityTreeOpen, abilityTreeSelectionsByClass, abilityTreeVersionHint]);
 
   const summary = useMemo(() => {
     if (!catalog) return null;
@@ -260,6 +303,23 @@ export function App() {
       catalog,
     );
   }, [catalog, snapshot]);
+
+  const inferredWeaponClass = useMemo(() => {
+    if (!catalog) return null;
+    const weaponId = snapshot.slots.weapon;
+    if (weaponId == null) return null;
+    const weapon = catalog.itemsById.get(weaponId);
+    if (!weapon) return null;
+    return weapon.classReq ?? getClassFromWeaponType(weapon.type);
+  }, [catalog, snapshot.slots.weapon]);
+
+  const abilityTreeClass = snapshot.characterClass ?? inferredWeaponClass;
+  const abilityTreeTree = useMemo(() => getClassTree(abilityTreeDataset, abilityTreeClass), [abilityTreeDataset, abilityTreeClass]);
+  const abilityTreeEvaluation = useMemo(() => {
+    if (!abilityTreeTree || !abilityTreeClass) return null;
+    const selected = abilityTreeSelectionsByClass[abilityTreeClass] ?? [];
+    return evaluateAbilityTree(abilityTreeTree, selected, snapshot.level);
+  }, [abilityTreeSelectionsByClass, abilityTreeTree, abilityTreeClass, snapshot.level]);
 
   const compareSummary = useMemo(() => {
     if (!catalog || !summary) return null;
@@ -388,8 +448,13 @@ export function App() {
         const url = new URL(trimmed);
         const search = parseSearchStateFromUrl(url);
         const wbPatch = parseWorkbenchPatchFromUrl(url);
+        const atreeState = parseAbilityTreeStateFromUrl(url);
         setSearchState(search);
         if (wbPatch) store.hydrateSnapshot(wbPatch);
+        if (atreeState) {
+          setAbilityTreeSelectionsByClass(atreeState.selectedByClass ?? {});
+          setAbilityTreeVersionHint(atreeState.version ?? null);
+        }
         setStatusMessage('Imported Workbench URL state.');
         return;
       }
@@ -407,7 +472,11 @@ export function App() {
     writeUrlState({
       search: searchState,
       workbenchSnapshot: snapshot,
-      mode: autoBuilderOpen ? 'autobuilder' : null,
+      mode: autoBuilderOpen ? 'autobuilder' : abilityTreeOpen ? 'abilitytree' : null,
+      abilityTreeState: {
+        version: abilityTreeVersionHint,
+        selectedByClass: abilityTreeSelectionsByClass,
+      },
       replace: true,
     });
     await copyText(window.location.href);
@@ -426,6 +495,12 @@ export function App() {
 
   const openLegacyBuilder = () => {
     window.open(getLegacyBuilderUrl(snapshot.legacyHash), '_blank', 'noopener,noreferrer');
+  };
+
+  const openAbilityTree = () => {
+    setAbilityTreeError(null);
+    setAutoBuilderOpen(false);
+    setAbilityTreeOpen(true);
   };
 
   if (catalogError) {
@@ -459,6 +534,11 @@ export function App() {
               <div className="mb-1 flex flex-wrap items-center gap-2">
                 <span className="wb-chip border-cyan-300/30 bg-cyan-300/8 text-cyan-100">Standalone Alpha</span>
                 <span className="wb-chip">Legacy-compatible imports</span>
+                {abilityTreeEvaluation ? (
+                  <span className="wb-chip border-emerald-300/30 bg-emerald-300/8 text-emerald-100">
+                    Ability Tree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
+                  </span>
+                ) : null}
               </div>
               <div className="flex items-center gap-2 text-lg font-semibold">
                 <Hammer size={18} className="text-cyan-200" />
@@ -468,7 +548,7 @@ export function App() {
                 Modular loadout planning studio with a compatibility bridge for legacy builder links and hashes.
               </div>
               <div className="mt-1 text-[11px] tracking-wide text-[var(--wb-muted-2)]">
-                Ability tree editing still lives in `/builder/` during Workbench v1 migration.
+                Ability tree editing now works in Workbench using legacy data/rules. Workbench summary metrics still exclude ability-tree effects for now.
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -502,7 +582,20 @@ export function App() {
                 <Link2 size={13} className="mr-1 inline" />
                 Share Session
               </Button>
-              <Button variant="ghost" onClick={() => setAutoBuilderOpen(true)}>
+              <Button
+                variant="ghost"
+                onClick={openAbilityTree}
+              >
+                <TreePine size={13} className="mr-1 inline" />
+                Ability Tree
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setAbilityTreeOpen(false);
+                  setAutoBuilderOpen(true);
+                }}
+              >
                 Optimizer
               </Button>
             </div>
@@ -536,8 +629,25 @@ export function App() {
             summary={summary}
             compareSummary={compareSummary}
             compareSlot={snapshot.comparePreview.slot}
+            abilityTreeSummary={
+              abilityTreeEvaluation && abilityTreeClass
+                ? {
+                    className: abilityTreeClass,
+                    apUsed: abilityTreeEvaluation.apUsed,
+                    apCap: abilityTreeEvaluation.apCap,
+                    selectedCount: abilityTreeEvaluation.activeIds.length,
+                    hasErrors: abilityTreeEvaluation.errors.length > 0 || abilityTreeEvaluation.apUsed > abilityTreeEvaluation.apCap,
+                  }
+                : null
+            }
             actions={{
-              onOpenAutoBuilder: () => setAutoBuilderOpen(true),
+              onOpenAutoBuilder: () => {
+                setAbilityTreeOpen(false);
+                setAutoBuilderOpen(true);
+              },
+              onOpenAbilityTree: () => {
+                openAbilityTree();
+              },
               onExportWorkbench: exportWorkbench,
               onImportWorkbench: () => void importWorkbench(),
               onShareWorkbench: () => void shareWorkbench(),
@@ -558,6 +668,21 @@ export function App() {
           setAutoBuilderOpen(false);
           setStatusMessage('Loaded autobuilder candidate into Workbench.');
         }}
+      />
+      <AbilityTreeModal
+        open={abilityTreeOpen}
+        onOpenChange={(open) => {
+          if (open) setAbilityTreeError(null);
+          setAbilityTreeOpen(open);
+        }}
+        dataset={abilityTreeDataset}
+        loading={abilityTreeLoading}
+        error={abilityTreeError}
+        level={snapshot.level}
+        selectedClass={snapshot.characterClass}
+        inferredClass={inferredWeaponClass}
+        selectionsByClass={abilityTreeSelectionsByClass}
+        onSelectionsChange={setAbilityTreeSelectionsByClass}
       />
     </DndContext>
   );

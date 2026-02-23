@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { SearchFilterState } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE, sanitizeSearchFilterState } from '@/domain/search/filter-schema';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
+import type { AbilityTreeUrlState } from '@/domain/ability-tree/types';
 import { ITEM_CATEGORY_KEYS, ITEM_SLOTS } from '@/domain/items/types';
 
 const wbUrlSnapshotSchema = z.object({
@@ -12,6 +13,20 @@ const wbUrlSnapshotSchema = z.object({
   characterClass: z.enum(['Warrior', 'Assassin', 'Mage', 'Archer', 'Shaman']).nullable().optional(),
   selectedSlot: z.string().nullable().optional(),
   legacyHash: z.string().nullable().optional(),
+});
+
+const atreeUrlStateSchema = z.object({
+  version: z.string().nullable().optional(),
+  selectedByClass: z
+    .object({
+      Warrior: z.array(z.number().int()).optional(),
+      Assassin: z.array(z.number().int()).optional(),
+      Mage: z.array(z.number().int()).optional(),
+      Archer: z.array(z.number().int()).optional(),
+      Shaman: z.array(z.number().int()).optional(),
+    })
+    .partial()
+    .default({}),
 });
 
 function base64UrlEncode(value: string): string {
@@ -41,6 +56,7 @@ export interface ParsedWorkbenchUrlState {
   workbenchPatch: Partial<WorkbenchSnapshot> | null;
   legacyHash: string | null;
   mode: string | null;
+  abilityTree: AbilityTreeUrlState | null;
 }
 
 export function parseSearchStateFromUrl(url: URL): SearchFilterState {
@@ -123,6 +139,21 @@ export function parseWorkbenchPatchFromUrl(url: URL): Partial<WorkbenchSnapshot>
   }
 }
 
+export function parseAbilityTreeStateFromUrl(url: URL): AbilityTreeUrlState | null {
+  const raw = url.searchParams.get('atree');
+  if (!raw) return null;
+  try {
+    const decoded = base64UrlDecode(raw);
+    const parsed = atreeUrlStateSchema.parse(JSON.parse(decoded));
+    return {
+      version: parsed.version ?? null,
+      selectedByClass: parsed.selectedByClass,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function parseUrlState(locationLike: Location = window.location): ParsedWorkbenchUrlState {
   const url = new URL(locationLike.href);
   const legacyHash = url.hash ? url.hash.slice(1) : null;
@@ -131,6 +162,7 @@ export function parseUrlState(locationLike: Location = window.location): ParsedW
     workbenchPatch: parseWorkbenchPatchFromUrl(url),
     legacyHash: legacyHash || null,
     mode: url.searchParams.get('mode'),
+    abilityTree: parseAbilityTreeStateFromUrl(url),
   };
 }
 
@@ -152,6 +184,7 @@ export function writeUrlState(args: {
   workbenchSnapshot: WorkbenchSnapshot;
   legacyHash?: string | null;
   mode?: string | null;
+  abilityTreeState?: AbilityTreeUrlState | null;
   replace?: boolean;
 }): void {
   const url = new URL(window.location.href);
@@ -194,6 +227,20 @@ export function writeUrlState(args: {
 
   params.set('wb', encodeWorkbenchSnapshot(args.workbenchSnapshot));
 
+  if (args.abilityTreeState && Object.keys(args.abilityTreeState.selectedByClass ?? {}).length > 0) {
+    params.set(
+      'atree',
+      base64UrlEncode(
+        JSON.stringify({
+          version: args.abilityTreeState.version ?? null,
+          selectedByClass: args.abilityTreeState.selectedByClass,
+        }),
+      ),
+    );
+  } else {
+    params.delete('atree');
+  }
+
   if (args.mode) params.set('mode', args.mode);
   else params.delete('mode');
 
@@ -206,4 +253,3 @@ export function writeUrlState(args: {
     window.history.pushState({}, '', url);
   }
 }
-

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, ExternalLink, Link2, Upload } from 'lucide-react';
+import { Copy, ExternalLink, Link2, TreePine, Upload } from 'lucide-react';
 import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
 import { ITEM_SLOTS, slotLabel } from '@/domain/items/types';
@@ -52,11 +52,20 @@ function getFocusedItem(props: {
 
 export interface SummaryActions {
   onOpenAutoBuilder(): void;
+  onOpenAbilityTree(): void;
   onExportWorkbench(): void;
   onImportWorkbench(): void;
   onShareWorkbench(): void;
   onCopyLegacyLink(): void;
   onOpenLegacyBuilder(): void;
+}
+
+export interface AbilityTreeSummaryInfo {
+  className: string;
+  apUsed: number;
+  apCap: number;
+  selectedCount: number;
+  hasErrors: boolean;
 }
 
 export function BuildSummaryPanel(props: {
@@ -65,6 +74,7 @@ export function BuildSummaryPanel(props: {
   summary: BuildSummary;
   compareSummary?: BuildSummary | null;
   compareSlot?: ItemSlot | null;
+  abilityTreeSummary?: AbilityTreeSummaryInfo | null;
   actions: SummaryActions;
 }) {
   const [showFocusedItemDetails, setShowFocusedItemDetails] = useState(false);
@@ -81,6 +91,10 @@ export function BuildSummaryPanel(props: {
       title="Live Build Summary"
       headerRight={
         <div className="flex gap-1">
+          <Button className="px-2 py-1 text-xs" variant="ghost" onClick={props.actions.onOpenAbilityTree}>
+            <TreePine size={12} className="mr-1" />
+            Ability Tree
+          </Button>
           <Button className="px-2 py-1 text-xs" onClick={props.actions.onOpenAutoBuilder}>
             Auto Build
           </Button>
@@ -132,8 +146,30 @@ export function BuildSummaryPanel(props: {
         </div>
 
         <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-[var(--wb-muted)]">
-          Workbench primary KPIs use legacy-compatible metrics (Base DPS + Effective HP, ability tree excluded). Proxy values are still used internally for search/autobuilder heuristics.
+          Workbench primary KPIs use legacy-compatible metrics (Base DPS + Effective HP). Ability tree editing is now in Workbench, but these summary metrics still exclude ability-tree effects for now. Proxy values are still used internally for search/autobuilder heuristics.
         </div>
+
+        {props.abilityTreeSummary ? (
+          <div
+            className={[
+              'rounded-xl border p-3 text-xs',
+              props.abilityTreeSummary.hasErrors
+                ? 'border-amber-400/30 bg-amber-400/8 text-amber-100'
+                : 'border-emerald-400/20 bg-emerald-400/8 text-emerald-100',
+            ].join(' ')}
+          >
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <div className="font-semibold">Ability Tree ({props.abilityTreeSummary.className})</div>
+              <Button variant="ghost" className="px-2 py-1 text-xs" onClick={props.actions.onOpenAbilityTree}>
+                Edit
+              </Button>
+            </div>
+            <div>
+              AP {props.abilityTreeSummary.apUsed}/{props.abilityTreeSummary.apCap} • {props.abilityTreeSummary.selectedCount} abilities selected
+            </div>
+            {props.abilityTreeSummary.hasErrors ? <div className="mt-1">Tree has validation issues (dependencies/blockers/AP).</div> : null}
+          </div>
+        ) : null}
 
         {props.compareSummary && props.compareSlot ? (
           <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/8 p-3 text-xs text-emerald-100">
