@@ -1,0 +1,202 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+  --wb-bg: #070c14;
+  --wb-panel: #0f1725;
+  --wb-panel-2: #172235;
+  --wb-panel-3: #0b121d;
+  --wb-border: #2d3f58;
+  --wb-border-muted: #1c2a3d;
+  --wb-text: #e5f4ff;
+  --wb-muted: #93aac3;
+  --wb-muted-2: #738ca8;
+  --wb-accent: #22d3ee;
+  --wb-accent-2: #f59e0b;
+  --wb-warn: #fbbf24;
+  --wb-danger: #fb7185;
+  --wb-shadow: 0 18px 42px rgba(0, 0, 0, 0.38);
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", sans-serif;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    radial-gradient(1200px 640px at 12% -8%, rgba(34, 211, 238, 0.16), transparent 58%),
+    radial-gradient(960px 680px at 100% 0%, rgba(245, 158, 11, 0.13), transparent 62%),
+    radial-gradient(800px 600px at 50% 120%, rgba(34, 211, 238, 0.08), transparent 70%),
+    linear-gradient(180deg, #05080e 0%, #070c14 100%);
+  color: var(--wb-text);
+  position: relative;
+  overflow-x: hidden;
+}
+
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+}
+
+body::before {
+  opacity: 0.25;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 24px 24px;
+  mask-image: radial-gradient(circle at 20% 10%, black 20%, transparent 72%);
+}
+
+body::after {
+  background:
+    radial-gradient(420px 220px at 8% 12%, rgba(34, 211, 238, 0.12), transparent 70%),
+    radial-gradient(540px 280px at 92% 10%, rgba(245, 158, 11, 0.09), transparent 75%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.wb-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wb-border) transparent;
+}
+
+.wb-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.wb-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--wb-border);
+  border-radius: 999px;
+}
+
+.wb-panel {
+  background:
+    linear-gradient(180deg, rgba(20, 32, 50, 0.92), rgba(10, 18, 29, 0.96)),
+    linear-gradient(120deg, rgba(34, 211, 238, 0.05), rgba(245, 158, 11, 0.03));
+  border: 1px solid var(--wb-border);
+  box-shadow: var(--wb-shadow);
+  backdrop-filter: blur(8px);
+}
+
+.wb-hero {
+  position: relative;
+  overflow: hidden;
+}
+
+.wb-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(600px 180px at 0% 0%, rgba(34, 211, 238, 0.12), transparent 70%),
+    radial-gradient(460px 160px at 100% 0%, rgba(245, 158, 11, 0.1), transparent 70%);
+  border-radius: inherit;
+}
+
+.wb-button {
+  border: 1px solid var(--wb-border);
+  background: rgba(27, 37, 67, 0.95);
+  color: var(--wb-text);
+  border-radius: 12px;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.1rem;
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease, transform .15s ease;
+}
+
+.wb-button:hover {
+  background: rgba(39, 54, 96, 0.95);
+  border-color: #39508d;
+}
+
+.wb-button:active {
+  transform: translateY(1px);
+}
+
+.wb-button[data-variant="primary"] {
+  background: linear-gradient(180deg, #0c8ea2, #0b6676);
+  border-color: #1ab4ca;
+}
+
+.wb-button[data-variant="ghost"] {
+  background: rgba(255,255,255,0.02);
+}
+
+.wb-input,
+.wb-select,
+.wb-textarea {
+  width: 100%;
+  border: 1px solid var(--wb-border);
+  background: rgba(8, 12, 24, 0.9);
+  color: var(--wb-text);
+  border-radius: 10px;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.875rem;
+}
+
+.wb-input::placeholder,
+.wb-textarea::placeholder {
+  color: rgba(157, 176, 223, 0.7);
+}
+
+.wb-chip {
+  border: 1px solid var(--wb-border);
+  border-radius: 999px;
+  background: rgba(20, 27, 47, 0.9);
+  color: var(--wb-text);
+  padding: 0.15rem 0.55rem;
+  font-size: 0.75rem;
+}
+
+.wb-chip[data-active="true"] {
+  border-color: rgba(34, 211, 238, 0.55);
+  background: rgba(34, 211, 238, 0.12);
+}
+
+.wb-card {
+  border: 1px solid var(--wb-border-muted);
+  border-radius: 12px;
+  background: rgba(10, 14, 25, 0.8);
+}
+
+.wb-card:hover {
+  border-color: var(--wb-border);
+}
+
+.wb-grid-backdrop {
+  background-image:
+    linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+.wb-danger {
+  color: var(--wb-danger);
+}
+
+.wb-muted {
+  color: var(--wb-muted);
+}
+
+.wb-accent {
+  color: var(--wb-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

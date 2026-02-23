@@ -1,0 +1,24 @@
+
+Theme, formatting, and overall inspiration: Wynndata (Dukio)
+    - https://wynndata.tk
+
+The game, of course
+    - wynncraft.com
+
+Additional Contributors, in no particular order:
+ - Kiocifer (Icons!)
+ - IncinerateMe (helping transition to 1.20.3 / atree / CI helper)
+ - puppy (dog)
+ - SockMower (ability tree encode/decode optimization)
+ - ITechnically (coding emotional support / misc)
+ - touhoku (best IM)
+ - HeyZeer0 (huge help in getting our damage formulas right)
+ - blankman (fin444 github) (beautifying atree visuals)
+ - lemonalade (ability tree pdf for us to copy from :) )
+ - Lennon (Skill point formula reversing)
+ - Phanta (WynnAtlas custom expression parser / item search)
+ - RawFish (and WIM team) (wynn api shenanigans, major IDs, misc.)
+ - nbcss (and WIM team) (Crafted Item mechanics reverse engineering, testing)
+ - dr_carlos (Hiding UI elements properly, fade animations, proper error handling)
+ - davidwnguyen (Data updates for major ids and aspects, script update for new IDs)
+ - Atlas Inc discord (feedback, ideas, damage calc, etc)
