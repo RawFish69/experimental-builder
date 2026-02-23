@@ -32,6 +32,7 @@ interface CandidatePoolEntry {
 }
 
 const SKILL_STATS: SkillStatKey[] = ['str', 'dex', 'int', 'def', 'agi'];
+const WEAPON_ATTACK_SPEED_ORDER = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
 
 function positiveStatBonus(item: NormalizedItem, stat: SkillStatKey): number {
   switch (stat) {
@@ -78,6 +79,74 @@ function cloneSlots(slots: WorkbenchSnapshot['slots']): WorkbenchSnapshot['slots
   return { ...slots };
 }
 
+function computeFinalWeaponAttackSpeed(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+): string | null {
+  const weaponId = slots.weapon;
+  if (weaponId == null) return null;
+  const weapon = catalog.itemsById.get(weaponId);
+  if (!weapon) return null;
+  const baseIndex = WEAPON_ATTACK_SPEED_ORDER.indexOf(
+    weapon.atkSpd as (typeof WEAPON_ATTACK_SPEED_ORDER)[number],
+  );
+  if (baseIndex < 0) return null;
+
+  let totalAtkTier = 0;
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+    totalAtkTier += Math.round(item.numeric.atkTier || 0);
+  }
+
+  const finalIndex = Math.max(0, Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, baseIndex + totalAtkTier));
+  return WEAPON_ATTACK_SPEED_ORDER[finalIndex];
+}
+
+function summarySatisfiesTargetThresholds(
+  summary: ReturnType<typeof evaluateBuild>,
+  constraints: AutoBuildConstraints,
+): boolean {
+  const { target } = constraints;
+  if (typeof target.minLegacyBaseDps === 'number' && summary.derived.legacyBaseDps < target.minLegacyBaseDps) return false;
+  if (typeof target.minLegacyEhp === 'number' && summary.derived.legacyEhp < target.minLegacyEhp) return false;
+  if (typeof target.minDpsProxy === 'number' && summary.derived.dpsProxy < target.minDpsProxy) return false;
+  if (typeof target.minEhpProxy === 'number' && summary.derived.ehpProxy < target.minEhpProxy) return false;
+  if (typeof target.minMr === 'number' && summary.aggregated.mr < target.minMr) return false;
+  if (typeof target.minMs === 'number' && summary.aggregated.ms < target.minMs) return false;
+  if (typeof target.minSpeed === 'number' && summary.aggregated.speed < target.minSpeed) return false;
+  if (typeof target.minSkillPointTotal === 'number' && summary.derived.skillPointTotal < target.minSkillPointTotal) return false;
+  if (typeof target.maxReqTotal === 'number' && summary.derived.reqTotal > target.maxReqTotal) return false;
+  return true;
+}
+
+function slotsSatisfyFinalHardConstraints(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+  constraints: AutoBuildConstraints,
+  summary: ReturnType<typeof evaluateBuild>,
+): boolean {
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) return false;
+    // Recheck item-level hard constraints on locked / must-include items too.
+    if (!itemMatchesGlobalConstraints(item, constraints)) return false;
+  }
+
+  if (constraints.weaponAttackSpeeds.length > 0) {
+    const finalAttackSpeed = computeFinalWeaponAttackSpeed(slots, catalog);
+    if (!finalAttackSpeed || !constraints.weaponAttackSpeeds.includes(finalAttackSpeed)) {
+      return false;
+    }
+  }
+
+  return summarySatisfiesTargetThresholds(summary, constraints);
+}
+
 function itemMatchesGlobalConstraints(item: NormalizedItem, constraints: AutoBuildConstraints): boolean {
   if (!constraints.allowRestricted && (item.restricted || item.deprecated)) return false;
   if (item.level > constraints.level) return false;
@@ -86,13 +155,6 @@ function itemMatchesGlobalConstraints(item: NormalizedItem, constraints: AutoBui
   if (constraints.allowedTiers.length > 0 && !constraints.allowedTiers.includes(item.tier)) return false;
   if (constraints.minPowderSlots != null && item.powderSlots < constraints.minPowderSlots) return false;
   if (constraints.excludedMajorIds.length > 0 && constraints.excludedMajorIds.some((majorId) => item.majorIds.includes(majorId))) {
-    return false;
-  }
-  if (
-    item.category === 'weapon' &&
-    constraints.weaponAttackSpeeds.length > 0 &&
-    !constraints.weaponAttackSpeeds.includes(item.atkSpd)
-  ) {
     return false;
   }
   return true;
@@ -486,7 +548,7 @@ function finalizeBeamCandidates(params: {
   signal?: AbortSignal;
 }): {
   candidates: AutoBuildCandidate[];
-  rejectStats: { majorIds: number; spInvalid: number; duplicate: number };
+  rejectStats: { majorIds: number; spInvalid: number; duplicate: number; hardConstraints: number };
 } {
   const { beam, catalog, constraints, signal } = params;
   const candidates: AutoBuildCandidate[] = [];
@@ -495,6 +557,7 @@ function finalizeBeamCandidates(params: {
     majorIds: 0,
     spInvalid: 0,
     duplicate: 0,
+    hardConstraints: 0,
   };
 
   for (const node of beam) {
@@ -513,6 +576,10 @@ function finalizeBeamCandidates(params: {
     );
     if (!summary.derived.skillpointFeasible) {
       rejectStats.spInvalid++;
+      continue;
+    }
+    if (!slotsSatisfyFinalHardConstraints(node.slots, catalog, constraints, summary)) {
+      rejectStats.hardConstraints++;
       continue;
     }
     const key = canonicalCandidateKey(node.slots);
@@ -691,6 +758,7 @@ function enumerateExactCandidates(params: {
   let rejectedMajorIds = 0;
   let rejectedSpInvalid = 0;
   let rejectedDuplicate = 0;
+  let rejectedHardConstraints = 0;
 
   const recurse = (orderIndex: number, slots: WorkbenchSnapshot['slots']) => {
     if (signal?.aborted) throw new DOMException('Auto build cancelled', 'AbortError');
@@ -706,6 +774,10 @@ function enumerateExactCandidates(params: {
       );
       if (!summary.derived.skillpointFeasible) {
         rejectedSpInvalid++;
+        return;
+      }
+      if (!slotsSatisfyFinalHardConstraints(slots, catalog, constraints, summary)) {
+        rejectedHardConstraints++;
         return;
       }
       const key = canonicalCandidateKey(slots);
@@ -748,8 +820,8 @@ function enumerateExactCandidates(params: {
     expandedSlots: slotOrder.length,
     detail:
       candidates.length > 0
-        ? `Exact search produced ${candidates.length} valid builds. Rejected duplicates=${rejectedDuplicate}, SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}.`
-        : `Exact search produced 0 valid builds. Rejected SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, duplicates=${rejectedDuplicate}.`,
+        ? `Exact search produced ${candidates.length} valid builds. Rejected duplicates=${rejectedDuplicate}, SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, hard=${rejectedHardConstraints}.`
+        : `Exact search produced 0 valid builds. Rejected SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, duplicates=${rejectedDuplicate}, hard=${rejectedHardConstraints}.`,
   });
   candidates.sort((a, b) => {
     if (a.score !== b.score) return b.score - a.score;
@@ -938,8 +1010,8 @@ export function runAutoBuildBeamSearch(params: {
     expandedSlots: slotOrder.length,
     detail:
       candidates.length > 0
-        ? `Final eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}.`
-        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}.`,
+        ? `Final eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
+        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints}.`,
   });
 
   if (candidates.length === 0 && rejectStats.spInvalid > 0 && slotOrder.length > 0) {
@@ -984,8 +1056,8 @@ export function runAutoBuildBeamSearch(params: {
         expandedSlots: slotOrder.length,
         detail:
           candidates.length > 0
-            ? `Feasibility-first eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}.`
-            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}.`,
+            ? `Feasibility-first eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
+            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints}.`,
       });
     }
   }

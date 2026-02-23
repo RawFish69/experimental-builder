@@ -486,7 +486,7 @@ export function AutoBuilderModal(props: {
               </div>
 
               <div>
-                <FieldLabel>Weapon Attack Speed (optional)</FieldLabel>
+                <FieldLabel>Final Weapon Attack Speed (optional hard constraint)</FieldLabel>
                 <div className="flex flex-wrap gap-2">
                   {WEAPON_ATTACK_SPEED_OPTIONS.map((value) => (
                     <ChipButton
@@ -497,6 +497,9 @@ export function AutoBuilderModal(props: {
                       {value}
                     </ChipButton>
                   ))}
+                </div>
+                <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                  Matches the completed build attack speed (weapon base speed plus total Attack Speed Bonus / `atkTier`).
                 </div>
               </div>
 
