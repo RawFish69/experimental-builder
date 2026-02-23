@@ -54,15 +54,12 @@ async function map_load_local(init_func) {
  */
 async function load_map(init_func) {
 
-    let getUrl = window.location;
-    let baseUrl = getUrl.protocol + "//" + getUrl.host + "/" + getUrl.pathname.split('/')[1];
+    let baseUrl = url_base;
     let url = baseUrl + "/terrs_compress.json";
-    url = url.replace(/\w+.html/, "") ; 
     let result = await (await fetch(url)).json();
     terrdata = result;
 
     url = baseUrl + "/maploc_compress.json";
-    url = url.replace(/\w+.html/, "");
     result = await (await fetch(url)).json();
     maplocs = result.locations;
 

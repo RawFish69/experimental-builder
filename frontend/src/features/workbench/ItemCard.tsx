@@ -69,13 +69,13 @@ function ItemTypeIcon(props: { item: NormalizedItem }) {
 function tierColor(tier: string): string {
   switch (tier) {
     case 'Mythic':
-      return 'text-fuchsia-300';
+      return 'text-violet-300';
     case 'Fabled':
       return 'text-rose-300';
     case 'Legendary':
       return 'text-cyan-300';
     case 'Rare':
-      return 'text-violet-300';
+      return 'text-fuchsia-300';
     case 'Unique':
       return 'text-amber-300';
     case 'Set':

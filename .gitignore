@@ -1,6 +1,5 @@
 *.swp
 *.bat
-*.json
 sets/
 
 .idea/

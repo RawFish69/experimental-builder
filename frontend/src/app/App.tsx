@@ -419,7 +419,7 @@ export function App() {
       setStatusMessage('No imported legacy hash is currently available.');
       return;
     }
-    const url = `${window.location.origin}${getLegacyBuilderUrl(snapshot.legacyHash)}`;
+    const url = new URL(getLegacyBuilderUrl(snapshot.legacyHash), window.location.href).href;
     await copyText(url);
     setStatusMessage('Legacy builder link copied.');
   };

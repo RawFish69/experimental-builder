@@ -92,9 +92,9 @@ class Loader {
      * @returns Promise<JSON | JSON[]>
      */
     static async load_json(paths, cache_mode='default') {
-        const protocol = window.location.protocol;
-        const host = window.location.host;
-        const base_url = `${protocol}//${host}`
+        const base_url = (typeof url_base === "string" && url_base.length > 0)
+            ? url_base
+            : `${window.location.protocol}//${window.location.host}`;
 
         if (typeof paths === "string") {
             let url = `${base_url}/${paths}.json`;

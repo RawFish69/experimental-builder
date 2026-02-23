@@ -76,8 +76,9 @@ function compressJsonBridgePlugin() {
   }
 }
 
-export default defineConfig({
-  base: '/workbench/',
+export default defineConfig(({ command }) => ({
+  // Relative build output keeps /workbench working when the repo is hosted at /<repo>/ on GitHub Pages.
+  base: command === 'build' ? './' : '/workbench/',
   plugins: [react(), tailwindcss(), compressJsonBridgePlugin()],
   resolve: {
     alias: {
@@ -89,4 +90,4 @@ export default defineConfig({
     emptyOutDir: true,
     sourcemap: false,
   },
-})
+}))

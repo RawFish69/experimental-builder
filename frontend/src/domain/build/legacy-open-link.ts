@@ -6,7 +6,6 @@ export function normalizeHash(hash: string | null | undefined): string | null {
 
 export function getLegacyBuilderUrl(hash?: string | null): string {
   const clean = normalizeHash(hash);
-  const base = '/builder/';
+  const base = '../builder/';
   return clean ? `${base}#${clean}` : base;
 }
-

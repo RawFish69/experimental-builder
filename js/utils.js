@@ -1,5 +1,16 @@
 let getUrl = window.location;
-const url_base = getUrl.protocol + "//" + getUrl.host + "/" + getUrl.pathname.split('/')[1];
+const url_base = (() => {
+    const fallbackBase = `${getUrl.protocol}//${getUrl.host}`;
+    try {
+        const currentScriptSrc = document.currentScript && document.currentScript.src;
+        if (!currentScriptSrc) {
+            return fallbackBase;
+        }
+        return currentScriptSrc.replace(/\/js\/utils\.js(?:[?#].*)?$/, "");
+    } catch (_err) {
+        return fallbackBase;
+    }
+})();
 
 // huge regex :doom:
 // replace with navigator.userAgentData.mobile once it has wider support
