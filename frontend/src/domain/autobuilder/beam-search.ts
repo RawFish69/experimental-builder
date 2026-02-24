@@ -357,6 +357,22 @@ function validateFinalHardConstraints(
     if (!itemMatchesGlobalConstraints(item, constraints)) return { ok: false, reason: 'item' };
   }
 
+  // Enforce legacy "illegal item combination" rules for certain quest rewards.
+  // Example: Hive rewards like Twilight-Gilded Cloak and Prowess (quest: The Qira Hive)
+  // cannot be used together; at most one such item is allowed in a build.
+  let hiveQuestCount = 0;
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+    const quest = typeof item.legacyRaw.quest === 'string' ? (item.legacyRaw.quest as string) : null;
+    if (quest === 'The Qira Hive') hiveQuestCount++;
+  }
+  if (hiveQuestCount > 1) {
+    return { ok: false, reason: 'item' };
+  }
+
   if (constraints.weaponAttackSpeeds.length > 0) {
     const finalAttackSpeed = computeFinalWeaponAttackSpeed(slots, catalog);
     if (!finalAttackSpeed || !constraints.weaponAttackSpeeds.includes(finalAttackSpeed)) {
