@@ -1,4 +1,5 @@
 import type { AutoBuildCandidate, AutoBuildConstraints, AutoBuildProgressEvent } from '@/domain/autobuilder/types';
+import { DEFAULT_AUTO_BUILDER_WEIGHTS, type AutoBuilderWeights } from '@/domain/autobuilder/types';
 import { scoreSummary } from '@/domain/autobuilder/scoring';
 import type { CatalogSnapshot, ItemSlot, NormalizedItem } from '@/domain/items/types';
 import { ITEM_SLOTS, itemCanBeWornByClass, slotToCategory } from '@/domain/items/types';
@@ -58,6 +59,8 @@ type FinalHardConstraintReason = 'attackSpeed' | 'thresholds' | 'item';
 interface FinalHardConstraintCheck {
   ok: boolean;
   reason?: FinalHardConstraintReason;
+  /** When reason is 'thresholds', one or more human-readable failed check messages (e.g. "minLegacyBaseDps (1200 < 1500)"). */
+  failedChecks?: string[];
 }
 
 const SKILL_STATS: SkillStatKey[] = ['str', 'dex', 'int', 'def', 'agi'];
@@ -284,17 +287,36 @@ function summarySatisfiesTargetThresholds(
   constraints: AutoBuildConstraints,
   slots?: WorkbenchSnapshot['slots'],
   catalog?: CatalogSnapshot,
-): boolean {
+): { ok: boolean; failedChecks?: string[] } {
   const { target } = constraints;
-  if (typeof target.minLegacyBaseDps === 'number' && summary.derived.legacyBaseDps < target.minLegacyBaseDps) return false;
-  if (typeof target.minLegacyEhp === 'number' && summary.derived.legacyEhp < target.minLegacyEhp) return false;
-  if (typeof target.minDpsProxy === 'number' && summary.derived.dpsProxy < target.minDpsProxy) return false;
-  if (typeof target.minEhpProxy === 'number' && summary.derived.ehpProxy < target.minEhpProxy) return false;
-  if (typeof target.minMr === 'number' && summary.aggregated.mr < target.minMr) return false;
-  if (typeof target.minMs === 'number' && summary.aggregated.ms < target.minMs) return false;
-  if (typeof target.minSpeed === 'number' && summary.aggregated.speed < target.minSpeed) return false;
-  if (typeof target.minSkillPointTotal === 'number' && summary.derived.skillPointTotal < target.minSkillPointTotal) return false;
-  if (typeof target.maxReqTotal === 'number' && summary.derived.reqTotal > target.maxReqTotal) return false;
+  const failedChecks: string[] = [];
+  if (typeof target.minLegacyBaseDps === 'number' && summary.derived.legacyBaseDps < target.minLegacyBaseDps) {
+    failedChecks.push(`minLegacyBaseDps (${summary.derived.legacyBaseDps} < ${target.minLegacyBaseDps})`);
+  }
+  if (typeof target.minLegacyEhp === 'number' && summary.derived.legacyEhp < target.minLegacyEhp) {
+    failedChecks.push(`minLegacyEhp (${summary.derived.legacyEhp} < ${target.minLegacyEhp})`);
+  }
+  if (typeof target.minDpsProxy === 'number' && summary.derived.dpsProxy < target.minDpsProxy) {
+    failedChecks.push(`minDpsProxy (${summary.derived.dpsProxy} < ${target.minDpsProxy})`);
+  }
+  if (typeof target.minEhpProxy === 'number' && summary.derived.ehpProxy < target.minEhpProxy) {
+    failedChecks.push(`minEhpProxy (${summary.derived.ehpProxy} < ${target.minEhpProxy})`);
+  }
+  if (typeof target.minMr === 'number' && summary.aggregated.mr < target.minMr) {
+    failedChecks.push(`minMr (${summary.aggregated.mr} < ${target.minMr})`);
+  }
+  if (typeof target.minMs === 'number' && summary.aggregated.ms < target.minMs) {
+    failedChecks.push(`minMs (${summary.aggregated.ms} < ${target.minMs})`);
+  }
+  if (typeof target.minSpeed === 'number' && summary.aggregated.speed < target.minSpeed) {
+    failedChecks.push(`minSpeed (${summary.aggregated.speed} < ${target.minSpeed})`);
+  }
+  if (typeof target.minSkillPointTotal === 'number' && summary.derived.skillPointTotal < target.minSkillPointTotal) {
+    failedChecks.push(`minSkillPointTotal (${summary.derived.skillPointTotal} < ${target.minSkillPointTotal})`);
+  }
+  if (typeof target.maxReqTotal === 'number' && summary.derived.reqTotal > target.maxReqTotal) {
+    failedChecks.push(`maxReqTotal (${summary.derived.reqTotal} > ${target.maxReqTotal})`);
+  }
   if ((target.customNumericRanges?.length ?? 0) > 0 && slots && catalog) {
     for (const range of target.customNumericRanges ?? []) {
       const key = range.key?.trim();
@@ -307,11 +329,15 @@ function summarySatisfiesTargetThresholds(
         if (!item) continue;
         total += item.numericIndex[key] ?? 0;
       }
-      if (typeof range.min === 'number' && total < range.min) return false;
-      if (typeof range.max === 'number' && total > range.max) return false;
+      if (typeof range.min === 'number' && total < range.min) {
+        failedChecks.push(`${key} (${total} < ${range.min})`);
+      }
+      if (typeof range.max === 'number' && total > range.max) {
+        failedChecks.push(`${key} (${total} > ${range.max})`);
+      }
     }
   }
-  return true;
+  return failedChecks.length > 0 ? { ok: false, failedChecks } : { ok: true };
 }
 
 function validateFinalHardConstraints(
@@ -336,8 +362,9 @@ function validateFinalHardConstraints(
     }
   }
 
-  if (!summarySatisfiesTargetThresholds(summary, constraints, slots, catalog)) {
-    return { ok: false, reason: 'thresholds' };
+  const thresholdResult = summarySatisfiesTargetThresholds(summary, constraints, slots, catalog);
+  if (!thresholdResult.ok) {
+    return { ok: false, reason: 'thresholds', failedChecks: thresholdResult.failedChecks };
   }
 
   return { ok: true };
@@ -354,6 +381,35 @@ function itemMatchesGlobalConstraints(item: NormalizedItem, constraints: AutoBui
     return false;
   }
   return true;
+}
+
+/** Boost factor for weights when a target threshold is set (used in threshold rescue pass). */
+const THRESHOLD_WEIGHT_BOOST = 2.5;
+
+/**
+ * Returns weights biased toward the dimensions that have target thresholds set,
+ * so beam search keeps more builds that can satisfy those thresholds.
+ * Exported for use by the modal's threshold rescue attempt.
+ */
+export function thresholdBiasedWeights(
+  target: AutoBuildConstraints['target'],
+  baseWeights: AutoBuildConstraints['weights'],
+): AutoBuilderWeights {
+  const w = { ...baseWeights };
+  if (typeof target.minLegacyBaseDps === 'number') w.legacyBaseDps = Math.max(w.legacyBaseDps, DEFAULT_AUTO_BUILDER_WEIGHTS.legacyBaseDps * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.minLegacyEhp === 'number') w.legacyEhp = Math.max(w.legacyEhp, DEFAULT_AUTO_BUILDER_WEIGHTS.legacyEhp * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.minDpsProxy === 'number') w.dpsProxy = Math.max(w.dpsProxy, DEFAULT_AUTO_BUILDER_WEIGHTS.dpsProxy * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.minEhpProxy === 'number') w.ehpProxy = Math.max(w.ehpProxy, DEFAULT_AUTO_BUILDER_WEIGHTS.ehpProxy * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.minMr === 'number' || typeof target.minMs === 'number') {
+    w.sustain = Math.max(w.sustain, DEFAULT_AUTO_BUILDER_WEIGHTS.sustain * THRESHOLD_WEIGHT_BOOST);
+  }
+  if (typeof target.minSpeed === 'number') w.speed = Math.max(w.speed, DEFAULT_AUTO_BUILDER_WEIGHTS.speed * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.minSkillPointTotal === 'number') w.skillPointTotal = Math.max(w.skillPointTotal, DEFAULT_AUTO_BUILDER_WEIGHTS.skillPointTotal * THRESHOLD_WEIGHT_BOOST);
+  if (typeof target.maxReqTotal === 'number') w.reqTotalPenalty = Math.max(w.reqTotalPenalty, DEFAULT_AUTO_BUILDER_WEIGHTS.reqTotalPenalty * THRESHOLD_WEIGHT_BOOST);
+  if ((target.customNumericRanges?.length ?? 0) > 0) {
+    w.sustain = Math.max(w.sustain, DEFAULT_AUTO_BUILDER_WEIGHTS.sustain * THRESHOLD_WEIGHT_BOOST);
+  }
+  return w;
 }
 
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
@@ -833,6 +889,8 @@ function finalizeBeamCandidates(params: {
     hardAttackSpeed: number;
     hardThresholds: number;
     hardItem: number;
+    /** First example of a threshold failure (e.g. "minLegacyBaseDps (1200 < 1500)") for diagnostics. */
+    thresholdFailureExample?: string;
   };
 } {
   const { beam, catalog, constraints, skillpointAssist, signal } = params;
@@ -846,6 +904,7 @@ function finalizeBeamCandidates(params: {
     hardAttackSpeed: 0,
     hardThresholds: 0,
     hardItem: 0,
+    thresholdFailureExample: undefined as string | undefined,
   };
 
   for (const node of beam) {
@@ -871,8 +930,12 @@ function finalizeBeamCandidates(params: {
     if (!hardCheck.ok) {
       rejectStats.hardConstraints++;
       if (hardCheck.reason === 'attackSpeed') rejectStats.hardAttackSpeed++;
-      else if (hardCheck.reason === 'thresholds') rejectStats.hardThresholds++;
-      else rejectStats.hardItem++;
+      else if (hardCheck.reason === 'thresholds') {
+        rejectStats.hardThresholds++;
+        if (rejectStats.thresholdFailureExample === undefined && hardCheck.failedChecks?.length) {
+          rejectStats.thresholdFailureExample = hardCheck.failedChecks[0];
+        }
+      } else rejectStats.hardItem++;
       continue;
     }
     const key = canonicalCandidateKey(node.slots);
@@ -1166,8 +1229,10 @@ export function runAutoBuildBeamSearch(params: {
   constraints: AutoBuildConstraints;
   onProgress?: (event: AutoBuildProgressEvent) => void;
   signal?: AbortSignal;
+  /** When true, skip the threshold rescue pass to avoid recursion. */
+  alreadyThresholdRescue?: boolean;
 }): AutoBuildCandidate[] {
-  const { catalog, baseWorkbench, constraints, onProgress, signal } = params;
+  const { catalog, baseWorkbench, constraints, onProgress, signal, alreadyThresholdRescue } = params;
   if (signal?.aborted) throw new DOMException('Auto build cancelled', 'AbortError');
 
   let baseSlots = cloneSlots(baseWorkbench.slots);
@@ -1373,6 +1438,7 @@ export function runAutoBuildBeamSearch(params: {
     constraints,
     signal,
   });
+  const thresholdExampleDetail = rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : '';
   onProgress?.({
     phase: 'diagnostics',
     processedStates,
@@ -1382,7 +1448,7 @@ export function runAutoBuildBeamSearch(params: {
     detail:
       candidates.length > 0
         ? `Final eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
-        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
+        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).${thresholdExampleDetail}`,
   });
 
   if (
@@ -1445,6 +1511,7 @@ export function runAutoBuildBeamSearch(params: {
       });
       candidates = finalized.candidates;
       rejectStats = finalized.rejectStats;
+      const feasibilityThresholdExample = rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : '';
       onProgress?.({
         phase: 'diagnostics',
         processedStates: fallback.processedStates,
@@ -1454,8 +1521,62 @@ export function runAutoBuildBeamSearch(params: {
         detail:
           candidates.length > 0
             ? `Feasibility-first eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
-            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
+            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).${feasibilityThresholdExample}`,
       });
+    }
+  }
+
+  if (
+    candidates.length === 0 &&
+    rejectStats.hardThresholds > 0 &&
+    !alreadyThresholdRescue
+  ) {
+    const target = constraints.target;
+    const hasTargetThresholds =
+      typeof target.minLegacyBaseDps === 'number' ||
+      typeof target.minLegacyEhp === 'number' ||
+      typeof target.minDpsProxy === 'number' ||
+      typeof target.minEhpProxy === 'number' ||
+      typeof target.minMr === 'number' ||
+      typeof target.minMs === 'number' ||
+      typeof target.minSpeed === 'number' ||
+      typeof target.minSkillPointTotal === 'number' ||
+      typeof target.maxReqTotal === 'number' ||
+      (target.customNumericRanges?.length ?? 0) > 0;
+    if (hasTargetThresholds) {
+      onProgress?.({
+        phase: 'diagnostics',
+        processedStates,
+        beamSize: finalizationBeam.length,
+        totalSlots: slotOrder.length,
+        expandedSlots: slotOrder.length,
+        detail: 'Retrying with threshold-biased beam search (weights tuned to target min/max).',
+      });
+      const rescueConstraints: AutoBuildConstraints = {
+        ...constraints,
+        weights: thresholdBiasedWeights(constraints.target, constraints.weights),
+        beamWidth: Math.max(constraints.beamWidth, 3600),
+        maxStates: Math.max(constraints.maxStates, Math.min(18_000_000, constraints.maxStates * 5)),
+      };
+      const rescueCandidates = runAutoBuildBeamSearch({
+        catalog,
+        baseWorkbench,
+        constraints: rescueConstraints,
+        onProgress,
+        signal,
+        alreadyThresholdRescue: true,
+      });
+      if (rescueCandidates.length > 0) {
+        onProgress?.({
+          phase: 'diagnostics',
+          processedStates,
+          beamSize: rescueCandidates.length,
+          totalSlots: slotOrder.length,
+          expandedSlots: slotOrder.length,
+          detail: `Threshold rescue: ${rescueCandidates.length} valid builds.`,
+        });
+        return rescueCandidates.slice(0, Math.max(1, constraints.topN));
+      }
     }
   }
 
@@ -1500,7 +1621,7 @@ export function runAutoBuildBeamSearch(params: {
         beamSize: finalizationBeam.length,
         totalSlots: slotOrder.length,
         expandedSlots: slotOrder.length,
-        detail: `Tome-assisted final eval still found 0 valid builds after +${TOME_ASSIST_FALLBACKS[TOME_ASSIST_FALLBACKS.length - 1][0]} per stat assist. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
+        detail: `Tome-assisted final eval still found 0 valid builds after +${TOME_ASSIST_FALLBACKS[TOME_ASSIST_FALLBACKS.length - 1][0]} per stat assist. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).${rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : ''}`,
       });
     }
   }

@@ -65,14 +65,14 @@ export function ChipButton(
   );
 }
 
-export function KpiTile(props: { label: string; value: string | number; delta?: number | null; className?: string }) {
+export function KpiTile(props: { label: string; value: string | number; delta?: number | null; className?: string; valueClassName?: string }) {
   const delta = props.delta;
   const deltaClass =
     delta == null ? '' : delta > 0 ? 'text-emerald-300' : delta < 0 ? 'text-rose-300' : 'text-slate-300';
   return (
     <div className={cn('wb-card p-3', props.className)}>
       <div className="text-[11px] uppercase tracking-wide text-[var(--wb-muted)]">{props.label}</div>
-      <div className="mt-1 text-lg font-semibold">{props.value}</div>
+      <div className={cn('mt-1 text-lg font-semibold', props.valueClassName)}>{props.value}</div>
       {delta != null ? (
         <div className={cn('mt-1 text-xs', deltaClass)}>
           {delta > 0 ? '+' : ''}

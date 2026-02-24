@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CatalogSnapshot } from '@/domain/items/types';
 import { ITEM_SLOTS } from '@/domain/items/types';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
-import type { AutoBuildCandidate, AutoBuildConstraints } from '@/domain/autobuilder/types';
+import type { AutoBuildCandidate, AutoBuildConstraints, AutoBuildProgressEvent } from '@/domain/autobuilder/types';
 import { DEFAULT_AUTO_BUILD_CONSTRAINTS } from '@/domain/autobuilder/types';
+import { thresholdBiasedWeights } from '@/domain/autobuilder/beam-search';
 import { AutoBuilderWorkerClient } from '@/domain/autobuilder/worker';
 import { Button, ChipButton, FieldLabel, Modal, NumberField } from '@/components/ui';
 
@@ -32,6 +33,28 @@ function parseCsvList(text: string, transform?: (value: string) => string): stri
 
 function toggleString(list: string[], value: string): string[] {
   return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
+}
+
+/** Parse reject stats from diagnostics detail (e.g. "Rejected SP-invalid=1, majorID=0, duplicates=2, hard=3 (speed=0, thresholds=3, item=0)"). */
+function parseRejectStatsFromDetail(detail: string | undefined): { spInvalid: number; majorIds: number; duplicate: number; hard: number; speed: number; thresholds: number; item: number } | null {
+  if (!detail) return null;
+  const spMatch = /SP-invalid=(\d+)/i.exec(detail);
+  const majorMatch = /majorID=(\d+)/i.exec(detail);
+  const dupMatch = /duplicates?=(\d+)/i.exec(detail);
+  const hardMatch = /hard=(\d+)/i.exec(detail);
+  const speedMatch = /speed=(\d+)/i.exec(detail);
+  const threshMatch = /thresholds=(\d+)/i.exec(detail);
+  const itemMatch = /item=(\d+)/i.exec(detail);
+  if (!hardMatch) return null;
+  return {
+    spInvalid: spMatch ? Number(spMatch[1]) : 0,
+    majorIds: majorMatch ? Number(majorMatch[1]) : 0,
+    duplicate: dupMatch ? Number(dupMatch[1]) : 0,
+    hard: Number(hardMatch[1]),
+    speed: speedMatch ? Number(speedMatch[1]) : 0,
+    thresholds: threshMatch ? Number(threshMatch[1]) : 0,
+    item: itemMatch ? Number(itemMatch[1]) : 0,
+  };
 }
 
 const WEAPON_ATTACK_SPEED_OPTIONS = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
@@ -144,8 +167,6 @@ export function AutoBuilderModal(props: {
   const [requiredMajorIdsText, setRequiredMajorIdsText] = useState('');
   const [excludedMajorIdsText, setExcludedMajorIdsText] = useState('');
 
-  const [minLegacyBaseDps, setMinLegacyBaseDps] = useState<number | null>(null);
-  const [minLegacyEhp, setMinLegacyEhp] = useState<number | null>(null);
   const [minMr, setMinMr] = useState<number | null>(null);
   const [minMs, setMinMs] = useState<number | null>(null);
   const [minSpeed, setMinSpeed] = useState<number | null>(null);
@@ -175,6 +196,7 @@ export function AutoBuilderModal(props: {
   const [useExhaustiveSmallPool, setUseExhaustiveSmallPool] = useState(true);
   const [exhaustiveStateLimit, setExhaustiveStateLimit] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.exhaustiveStateLimit);
   const [lastDiagnostics, setLastDiagnostics] = useState<string | null>(null);
+  const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
   const diagnosticsRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const customIdThresholdSeqRef = useRef(1);
@@ -339,6 +361,7 @@ export function AutoBuilderModal(props: {
       const candidates = await workerRef.current!.run(catalog, baseWorkbench, constraints, {
         signal: abortSignal,
         onProgress: (event) => {
+          setProgressEvent(event);
           if (event.phase === 'diagnostics' && event.detail) {
             diagnosticsRef.current = event.detail;
             setLastDiagnostics(event.detail);
@@ -355,6 +378,45 @@ export function AutoBuilderModal(props: {
       lastCandidates = candidates;
     }
 
+    if (lastCandidates.length === 0) {
+      const target = baseConstraints.target;
+      const hasTargetThresholds =
+        typeof target.minDpsProxy === 'number' ||
+        typeof target.minEhpProxy === 'number' ||
+        typeof target.minMr === 'number' ||
+        typeof target.minMs === 'number' ||
+        typeof target.minSpeed === 'number' ||
+        typeof target.minSkillPointTotal === 'number' ||
+        typeof target.maxReqTotal === 'number' ||
+        (target.customNumericRanges?.length ?? 0) > 0;
+      if (hasTargetThresholds) {
+        setProgress('Threshold rescue pass • topK 180, beam 3600, maxStates 2200000');
+        const rescueConstraints: AutoBuildConstraints = {
+          ...baseConstraints,
+          weights: thresholdBiasedWeights(baseConstraints.target, baseConstraints.weights),
+          topKPerSlot: Math.max(baseConstraints.topKPerSlot, 180),
+          beamWidth: Math.max(baseConstraints.beamWidth, 3600),
+          maxStates: Math.max(baseConstraints.maxStates, 2_200_000),
+        };
+        const rescueCandidates = await workerRef.current!.run(catalog, baseWorkbench, rescueConstraints, {
+          signal: abortSignal,
+          onProgress: (event) => {
+            setProgressEvent(event);
+            if (event.phase === 'diagnostics' && event.detail) {
+              diagnosticsRef.current = event.detail;
+              setLastDiagnostics(event.detail);
+            }
+            setProgress(
+              `Threshold rescue pass • ${event.phase}: ${event.expandedSlots}/${event.totalSlots} slots, beam ${event.beamSize}, states ${event.processedStates}${event.detail ? ` • ${event.detail}` : ''}`,
+            );
+          },
+        });
+        if (rescueCandidates.length > 0) {
+          return rescueCandidates;
+        }
+      }
+    }
+
     return lastCandidates;
   };
 
@@ -363,6 +425,7 @@ export function AutoBuilderModal(props: {
     setError(null);
     setResults([]);
     setLastDiagnostics(null);
+    setProgressEvent(null);
     diagnosticsRef.current = null;
 
     const must = parseNameList(mustIncludeText, props.catalog);
@@ -420,8 +483,6 @@ export function AutoBuilderModal(props: {
       excludedIds: excluded.ids,
       lockedSlots,
       target: {
-        minLegacyBaseDps: minLegacyBaseDps ?? undefined,
-        minLegacyEhp: minLegacyEhp ?? undefined,
         minMr: minMr ?? undefined,
         minMs: minMs ?? undefined,
         minSpeed: minSpeed ?? undefined,
@@ -452,6 +513,7 @@ export function AutoBuilderModal(props: {
       setResults(candidates);
       if (candidates.length === 0) {
         setProgress('');
+        setProgressEvent(null);
         const diag = diagnosticsRef.current ?? '';
         const spInvalidMatch = /SP-invalid=(\d+)/i.exec(diag);
         const spInvalidCount = spInvalidMatch ? Number(spInvalidMatch[1]) : 0;
@@ -476,7 +538,7 @@ export function AutoBuilderModal(props: {
             tomeAssistFailed
               ? 'This usually means the current search still is not surfacing enough requirement-support gear for the chosen weapon/goal combination. Try Exact Search + Deep Fallback, Balanced/Tank objective, and pin a few known requirement/attack-speed support items.'
               : spInvalidCount > 0
-              ? 'Try switching Primary Goal to Balanced or Tank, lowering Min Base DPS/EHP thresholds, and keeping Exact Search + Deep Fallback enabled.'
+              ? 'Try switching Primary Goal to Balanced or Tank and keeping Exact Search + Deep Fallback enabled.'
               : hardSpeedCount > 0
                 ? 'Tip: keep Exact Search + Deep Fallback enabled, lower thresholds, and try adding/pinning known +Attack Speed Bonus support items for the target speed.'
               : hardThresholdCount > 0 && customNumericRanges.length > 0
@@ -492,6 +554,7 @@ export function AutoBuilderModal(props: {
       setProgress('');
     } finally {
       setRunning(false);
+      setProgressEvent(null);
     }
   };
 
@@ -500,10 +563,15 @@ export function AutoBuilderModal(props: {
     workerRef.current?.cancelCurrent();
     setRunning(false);
     setProgress('Cancelled');
+    setProgressEvent(null);
   };
 
   const statusMessage = error ?? lastDiagnostics;
   const statusIsError = Boolean(error);
+  const rejectStats = parseRejectStatsFromDetail(progressEvent?.detail);
+  const totalRejected = rejectStats
+    ? rejectStats.spInvalid + rejectStats.majorIds + rejectStats.duplicate + rejectStats.hard
+    : 0;
 
   return (
     <Modal
@@ -511,6 +579,7 @@ export function AutoBuilderModal(props: {
       onOpenChange={props.onOpenChange}
       title="Build Solver"
       description="Beam search over item combinations. Uses Workbench summary metrics (legacy-style Base DPS / EHP, ability tree excluded)."
+      className="!w-[min(95vw,1360px)]"
       footer={
         <div className="flex items-center justify-between gap-3">
           <div className="text-sm text-[var(--wb-muted)]">{progress}</div>
@@ -530,8 +599,79 @@ export function AutoBuilderModal(props: {
         </div>
       }
     >
-      <div className="grid gap-4 lg:grid-cols-[420px_minmax(0,1fr)] lg:items-start">
-        <div className="grid gap-3">
+      {running && progressEvent ? (
+        <div className="mb-4 rounded-xl border border-sky-400/30 bg-sky-400/5 p-3">
+          <div className="mb-2 flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-sky-400/20 px-2 py-0.5 text-xs font-medium text-sky-100">
+              {progressEvent.phase === 'exact-search'
+                ? 'Exact search'
+                : progressEvent.phase === 'beam-search'
+                  ? 'Beam search'
+                  : progressEvent.phase === 'diagnostics'
+                    ? 'Finalize / diagnostics'
+                    : progressEvent.phase}
+            </span>
+            {progressEvent.totalSlots > 0 ? (
+              <span className="text-xs text-[var(--wb-muted)]">
+                Slots {progressEvent.expandedSlots}/{progressEvent.totalSlots}
+              </span>
+            ) : null}
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-black/20">
+            <div
+              className="h-full rounded-full bg-sky-400/70 transition-all duration-300"
+              style={{
+                width: progressEvent.totalSlots > 0 ? `${(100 * progressEvent.expandedSlots) / progressEvent.totalSlots}%` : '0%',
+              }}
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-4 text-xs text-[var(--wb-muted)]">
+            <span>States: {progressEvent.processedStates.toLocaleString()}</span>
+            <span>Beam: {progressEvent.beamSize.toLocaleString()}</span>
+          </div>
+          {rejectStats && totalRejected > 0 ? (
+            <div className="mt-3 border-t border-sky-400/20 pt-2">
+              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--wb-muted)]">
+                Rejected builds (this pass)
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {rejectStats.spInvalid > 0 ? (
+                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-200" title="Skill point / equip feasibility">
+                    SP: {rejectStats.spInvalid}
+                  </span>
+                ) : null}
+                {rejectStats.majorIds > 0 ? (
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200" title="Major ID requirement">
+                    Major ID: {rejectStats.majorIds}
+                  </span>
+                ) : null}
+                {rejectStats.duplicate > 0 ? (
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200" title="Duplicate build">
+                    Dup: {rejectStats.duplicate}
+                  </span>
+                ) : null}
+                {rejectStats.speed > 0 ? (
+                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-200" title="Attack speed">
+                    Speed: {rejectStats.speed}
+                  </span>
+                ) : null}
+                {rejectStats.thresholds > 0 ? (
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200" title="Min/max thresholds">
+                    Thresholds: {rejectStats.thresholds}
+                  </span>
+                ) : null}
+                {rejectStats.item > 0 ? (
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200" title="Item constraint">
+                    Item: {rejectStats.item}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="grid gap-4 lg:grid-cols-[1fr_1fr] lg:items-start">
+        <div className="grid min-w-0 gap-3">
           {showTips ? (
             <div className="wb-card p-3">
               <div className="mb-2 text-sm font-semibold">Tips (New Players)</div>
@@ -597,8 +737,6 @@ export function AutoBuilderModal(props: {
               </div>
 
               <NumberField label="Level" value={builderLevel} onChange={(value) => setBuilderLevel(value ?? props.snapshot.level)} min={1} max={106} />
-              <NumberField label="Min Base DPS" value={minLegacyBaseDps} onChange={setMinLegacyBaseDps} min={0} />
-              <NumberField label="Min Effective HP" value={minLegacyEhp} onChange={setMinLegacyEhp} min={0} />
 
               <div>
                 <FieldLabel>Must-Include Items (comma-separated names)</FieldLabel>
@@ -641,11 +779,11 @@ export function AutoBuilderModal(props: {
                     const range = props.catalog?.facetsMeta.numericRanges[row.key];
                     return (
                       <div key={row.id} className="rounded-lg border border-[var(--wb-border-muted)] p-2">
-                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_100px_100px_auto] sm:items-end">
+                        <div className="flex flex-col gap-2">
                           <div>
                             <FieldLabel>ID</FieldLabel>
                             <select
-                              className="wb-select"
+                              className="wb-select w-full"
                               value={row.key}
                               onChange={(e) => updateCustomIdThresholdRow(row.id, { key: e.target.value })}
                             >
@@ -656,33 +794,35 @@ export function AutoBuilderModal(props: {
                               ))}
                             </select>
                           </div>
-                          <div>
-                            <FieldLabel>Min</FieldLabel>
-                            <input
-                              className="wb-input"
-                              type="number"
-                              value={row.min ?? ''}
-                              onChange={(e) => {
-                                const raw = e.target.value.trim();
-                                updateCustomIdThresholdRow(row.id, { min: raw === '' ? null : Number(raw) });
-                              }}
-                            />
+                          <div className="flex flex-wrap items-end gap-2">
+                            <div className="min-w-[80px] flex-1">
+                              <FieldLabel>Min</FieldLabel>
+                              <input
+                                className="wb-input w-full"
+                                type="number"
+                                value={row.min ?? ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value.trim();
+                                  updateCustomIdThresholdRow(row.id, { min: raw === '' ? null : Number(raw) });
+                                }}
+                              />
+                            </div>
+                            <div className="min-w-[80px] flex-1">
+                              <FieldLabel>Max</FieldLabel>
+                              <input
+                                className="wb-input w-full"
+                                type="number"
+                                value={row.max ?? ''}
+                                onChange={(e) => {
+                                  const raw = e.target.value.trim();
+                                  updateCustomIdThresholdRow(row.id, { max: raw === '' ? null : Number(raw) });
+                                }}
+                              />
+                            </div>
+                            <Button variant="ghost" className="shrink-0" onClick={() => removeCustomIdThresholdRow(row.id)}>
+                              Remove
+                            </Button>
                           </div>
-                          <div>
-                            <FieldLabel>Max</FieldLabel>
-                            <input
-                              className="wb-input"
-                              type="number"
-                              value={row.max ?? ''}
-                              onChange={(e) => {
-                                const raw = e.target.value.trim();
-                                updateCustomIdThresholdRow(row.id, { max: raw === '' ? null : Number(raw) });
-                              }}
-                            />
-                          </div>
-                          <Button variant="ghost" onClick={() => removeCustomIdThresholdRow(row.id)}>
-                            Remove
-                          </Button>
                         </div>
                         {range ? (
                           <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
@@ -876,26 +1016,12 @@ export function AutoBuilderModal(props: {
           </div>
         </div>
 
-        <div className="grid min-h-0 auto-rows-min gap-3 self-start lg:sticky lg:top-0">
-          <div className="wb-card flex min-h-0 flex-col p-3">
+        <div className="grid min-h-0 min-w-0 auto-rows-min gap-3 self-start">
+          <div className="wb-card flex min-h-0 flex-col overflow-hidden p-3">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm font-semibold">Candidates</div>
               <div className="text-xs text-[var(--wb-muted)]">{results.length} shown</div>
             </div>
-            {statusMessage ? (
-              <details
-                className={`mb-2 rounded-xl border p-2 ${
-                  statusIsError
-                    ? 'border-rose-400/30 bg-rose-400/8 text-rose-100'
-                    : 'border-sky-400/20 bg-sky-400/5 text-sky-100'
-                }`}
-              >
-                <summary className="cursor-pointer list-none text-xs font-medium">
-                  {statusIsError ? 'Run issue (click to expand)' : 'Diagnostics (click to expand)'}
-                </summary>
-                <div className="mt-2 text-xs leading-relaxed">{statusMessage}</div>
-              </details>
-            ) : null}
 
             <div className="min-h-0 space-y-2 overflow-auto pr-1 wb-scrollbar max-h-[52vh] lg:max-h-[56vh]">
               {results.length === 0 ? (
@@ -937,6 +1063,20 @@ export function AutoBuilderModal(props: {
                 ))
               )}
             </div>
+            {statusMessage ? (
+              <details
+                className={`mt-2 rounded-xl border p-2 ${
+                  statusIsError
+                    ? 'border-rose-400/30 bg-rose-400/8 text-rose-100'
+                    : 'border-sky-400/20 bg-sky-400/5 text-sky-100'
+                }`}
+              >
+                <summary className="cursor-pointer list-none text-xs font-medium">
+                  {statusIsError ? 'Run issue (click to expand)' : 'Diagnostics (click to expand)'}
+                </summary>
+                <div className="mt-2 text-xs leading-relaxed">{statusMessage}</div>
+              </details>
+            ) : null}
           </div>
         </div>
       </div>

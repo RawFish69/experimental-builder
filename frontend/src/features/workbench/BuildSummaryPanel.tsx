@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink, Link2, TreePine } from 'lucide-react';
+import { ExternalLink, Link2, Network } from 'lucide-react';
 import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
 import { slotLabel } from '@/domain/items/types';
@@ -87,11 +87,11 @@ export function BuildSummaryPanel(props: {
       title="Live Build Summary"
       headerRight={
         <div className="flex gap-1">
-          <Button className="px-2 py-1 text-xs" variant="ghost" onClick={props.actions.onOpenAbilityTree}>
-            <TreePine size={12} className="mr-1" />
+          <Button className="inline-flex items-center gap-1.5 px-2 py-1 text-xs" variant="ghost" onClick={props.actions.onOpenAbilityTree}>
+            <Network size={12} />
             Ability Tree
           </Button>
-          <Button className="px-2 py-1 text-xs" onClick={props.actions.onOpenAutoBuilder}>
+          <Button className="inline-flex items-center px-2 py-1 text-xs" onClick={props.actions.onOpenAutoBuilder}>
             Build Solver
           </Button>
         </div>
@@ -142,7 +142,7 @@ export function BuildSummaryPanel(props: {
         <div className="wb-card p-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Melee DPS</div>
           <div className="mt-1 flex items-end justify-between gap-2">
-            <div className="text-xl font-semibold text-cyan-100">{fmt(meleePreview?.dps ?? props.summary.derived.legacyBaseDps)}</div>
+            <div className="text-xl font-semibold text-amber-200">{fmt(meleePreview?.dps ?? props.summary.derived.legacyBaseDps)}</div>
             {delta?.legacyBaseDps != null ? (
               <div className={['text-xs', delta.legacyBaseDps > 0 ? 'text-emerald-300' : delta.legacyBaseDps < 0 ? 'text-rose-300' : 'text-[var(--wb-muted)]'].join(' ')}>
                 {delta.legacyBaseDps > 0 ? '+' : ''}
@@ -154,7 +154,7 @@ export function BuildSummaryPanel(props: {
             {meleePreview
               ? `Legacy melee DPS (${meleePreview.attackSpeedTier}) • Per Attack ${fmt(meleePreview.perAttackAverage)}`
               : 'Legacy melee DPS preview unavailable (equip a weapon and valid ability tree selection).'}{' '}
-            • Melee % / Raw {fmt(props.summary.aggregated.offense.meleePct)} / {fmt(props.summary.aggregated.offense.meleeRaw)}
+            • Melee % / Raw <span className="text-amber-200/90">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="text-amber-200/90">{fmt(props.summary.aggregated.offense.meleeRaw)}</span>
           </div>
         </div>
 
@@ -184,7 +184,7 @@ export function BuildSummaryPanel(props: {
                           <span className="ml-1 text-[var(--wb-muted)]">({spell.displayPartName})</span>
                         </div>
                         <div className="text-right">
-                          <div className={spell.isHealing ? 'text-emerald-200' : 'text-cyan-100'}>
+                          <div className={spell.isHealing ? 'text-emerald-200' : 'text-amber-200'}>
                             {Math.round(spell.averageDisplayValue).toLocaleString()} {spell.isHealing ? 'heal' : 'avg dmg'}
                           </div>
                           {spell.manaCost != null ? (
@@ -198,7 +198,7 @@ export function BuildSummaryPanel(props: {
                           .map((part) => (
                             <div key={part.name} className="flex items-center justify-between gap-2">
                               <span className="truncate">{part.name}</span>
-                              <span className={part.type === 'heal' ? 'text-emerald-200' : 'text-cyan-100'}>
+                              <span className={part.type === 'heal' ? 'text-emerald-200' : 'text-amber-200'}>
                                 {Math.round(part.averageTotal ?? 0).toLocaleString()}
                               </span>
                             </div>
@@ -213,8 +213,8 @@ export function BuildSummaryPanel(props: {
         ) : null}
 
         <div className="grid grid-cols-2 gap-2">
-          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} />
-          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} />
+          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} valueClassName="text-amber-200" />
+          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} valueClassName="text-emerald-200" />
           <KpiTile label="Req Total" value={fmt(props.summary.derived.reqTotal)} />
           <KpiTile label="SP Total" value={fmt(props.summary.derived.skillPointTotal)} delta={delta?.skillPointTotal ?? null} />
         </div>
@@ -242,22 +242,22 @@ export function BuildSummaryPanel(props: {
           <div className="wb-card p-3">
             <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Offense</div>
             <div className="mt-2 grid gap-1 text-xs">
-              <div>Legacy Base DPS: {fmt(props.summary.derived.legacyBaseDps)}</div>
-              <div>Heuristic DPS Proxy: {fmt(props.summary.derived.dpsProxy)}</div>
-              <div>Spell % / Raw: {fmt(props.summary.aggregated.offense.spellPct)} / {fmt(props.summary.aggregated.offense.spellRaw)}</div>
-              <div>Melee % / Raw: {fmt(props.summary.aggregated.offense.meleePct)} / {fmt(props.summary.aggregated.offense.meleeRaw)}</div>
+              <div><span className="text-[var(--wb-muted)]">Legacy Base DPS:</span> <span className="font-medium text-amber-200">{fmt(props.summary.derived.legacyBaseDps)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Heuristic DPS Proxy:</span> <span className="text-amber-200/90">{fmt(props.summary.derived.dpsProxy)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Spell % / Raw:</span> <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.spellPct)}</span> / <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.spellRaw)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Melee % / Raw:</span> <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.meleeRaw)}</span></div>
             </div>
           </div>
           <div className="wb-card p-3">
             <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Defense & Utility</div>
             <div className="mt-2 grid gap-1 text-xs">
-              <div>Legacy EHP (AGI): {fmt(props.summary.derived.legacyEhp)}</div>
-              <div>Legacy EHP (No AGI): {fmt(props.summary.derived.legacyEhpNoAgi)}</div>
-              <div>Heuristic EHP Proxy: {fmt(props.summary.derived.ehpProxy)}</div>
-              <div>HP Total: {fmt(props.summary.aggregated.hpTotal)}</div>
-              <div>HPR Total: {fmt(props.summary.aggregated.hprTotal)}</div>
-              <div>MR / MS / LS: {fmt(props.summary.aggregated.mr)} / {fmt(props.summary.aggregated.ms)} / {fmt(props.summary.aggregated.ls)}</div>
-              <div>Walk Speed: {fmt(props.summary.aggregated.speed)}</div>
+              <div><span className="text-[var(--wb-muted)]">Legacy EHP (AGI):</span> <span className="font-medium text-emerald-200">{fmt(props.summary.derived.legacyEhp)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Legacy EHP (No AGI):</span> <span className="text-emerald-200/90">{fmt(props.summary.derived.legacyEhpNoAgi)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Heuristic EHP Proxy:</span> <span className="text-emerald-200/80">{fmt(props.summary.derived.ehpProxy)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">HP Total:</span> <span className="text-emerald-100/80">{fmt(props.summary.aggregated.hpTotal)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">HPR Total:</span> {fmt(props.summary.aggregated.hprTotal)}</div>
+              <div><span className="text-[var(--wb-muted)]">MR / MS / LS:</span> {fmt(props.summary.aggregated.mr)} / {fmt(props.summary.aggregated.ms)} / {fmt(props.summary.aggregated.ls)}</div>
+              <div><span className="text-[var(--wb-muted)]">Walk Speed:</span> {fmt(props.summary.aggregated.speed)}</div>
             </div>
           </div>
         </div>
