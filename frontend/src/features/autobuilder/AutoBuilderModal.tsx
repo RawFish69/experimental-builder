@@ -77,7 +77,6 @@ const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
   sustain: 'Sustain',
 };
 
-const COMPUTED_NUMERIC_KEYS = new Set(['reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore']);
 const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
   auto: 'Auto (Recommended)',
   fast: 'Fast',
@@ -111,6 +110,11 @@ function formatNumericIdLabel(key: string): string {
     intReq: 'INT Req',
     defReq: 'DEF Req',
     agiReq: 'AGI Req',
+    reqTotal: 'Req Total',
+    skillPointTotal: 'Skill Point Total',
+    offenseScore: 'Offense Score',
+    ehpProxy: 'EHP Proxy',
+    utilityScore: 'Utility Score',
   };
   return labels[key] ?? key;
 }
@@ -167,10 +171,6 @@ export function AutoBuilderModal(props: {
   const [requiredMajorIdsText, setRequiredMajorIdsText] = useState('');
   const [excludedMajorIdsText, setExcludedMajorIdsText] = useState('');
 
-  const [minMr, setMinMr] = useState<number | null>(null);
-  const [minMs, setMinMs] = useState<number | null>(null);
-  const [minSpeed, setMinSpeed] = useState<number | null>(null);
-  const [maxReqTotal, setMaxReqTotal] = useState<number | null>(null);
   const [customIdThresholds, setCustomIdThresholds] = useState<CustomIdThresholdRow[]>([]);
   const [primaryPreset, setPrimaryPreset] = useState<OptimizationPreset>('balanced');
   const [secondaryPreset, setSecondaryPreset] = useState<OptimizationPreset | null>(null);
@@ -213,9 +213,7 @@ export function AutoBuilderModal(props: {
   const majorIdQuickPicks = (props.catalog?.facetsMeta.majorIds ?? []).slice(0, 24);
   const numericIdOptions = useMemo(() => {
     const keys = Object.keys(props.catalog?.facetsMeta.numericRanges ?? {});
-    return keys
-      .filter((key) => !COMPUTED_NUMERIC_KEYS.has(key))
-      .sort((a, b) => formatNumericIdLabel(a).localeCompare(formatNumericIdLabel(b)));
+    return keys.sort((a, b) => formatNumericIdLabel(a).localeCompare(formatNumericIdLabel(b)));
   }, [props.catalog]);
 
   useEffect(() => {
@@ -383,11 +381,7 @@ export function AutoBuilderModal(props: {
       const hasTargetThresholds =
         typeof target.minDpsProxy === 'number' ||
         typeof target.minEhpProxy === 'number' ||
-        typeof target.minMr === 'number' ||
-        typeof target.minMs === 'number' ||
-        typeof target.minSpeed === 'number' ||
         typeof target.minSkillPointTotal === 'number' ||
-        typeof target.maxReqTotal === 'number' ||
         (target.customNumericRanges?.length ?? 0) > 0;
       if (hasTargetThresholds) {
         setProgress('Threshold rescue pass • topK 180, beam 3600, maxStates 2200000');
@@ -483,10 +477,6 @@ export function AutoBuilderModal(props: {
       excludedIds: excluded.ids,
       lockedSlots,
       target: {
-        minMr: minMr ?? undefined,
-        minMs: minMs ?? undefined,
-        minSpeed: minSpeed ?? undefined,
-        maxReqTotal: maxReqTotal ?? undefined,
         customNumericRanges,
       },
       allowedTiers: [...allowedTiers],
@@ -748,12 +738,6 @@ export function AutoBuilderModal(props: {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField label="Min MR" value={minMr} onChange={setMinMr} min={0} />
-                <NumberField label="Min MS" value={minMs} onChange={setMinMs} min={0} />
-                <NumberField label="Min Walk Speed" value={minSpeed} onChange={setMinSpeed} />
-                <NumberField label="Max Req Total" value={maxReqTotal} onChange={setMaxReqTotal} min={0} />
-              </div>
               <div>
                 <FieldLabel>Excluded Items (comma-separated names)</FieldLabel>
                 <textarea
@@ -768,7 +752,7 @@ export function AutoBuilderModal(props: {
                 <summary className="cursor-pointer text-sm font-medium">Advanced: Specific ID Min / Max</summary>
                 <div className="mt-3 grid gap-3">
                   <div className="text-xs text-[var(--wb-muted)]">
-                    Set build-wide min/max totals for specific item IDs (for example `sdPct`, `poison`, `atkTier`, `hprRaw`). These are hard constraints.
+                    Set build-wide min/max totals for any numeric ID (e.g. `mr`, `ms`, `spd`, `reqTotal`, `sdPct`, `poison`, `atkTier`). These are hard constraints.
                   </div>
                   {customIdThresholds.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-[var(--wb-border-muted)] px-3 py-2 text-xs text-[var(--wb-muted)]">
