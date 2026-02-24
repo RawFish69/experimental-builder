@@ -190,7 +190,7 @@ export function AutoBuilderModal(props: {
   const [excludedMajorIdsText, setExcludedMajorIdsText] = useState('');
 
   const [customIdThresholds, setCustomIdThresholds] = useState<CustomIdThresholdRow[]>([]);
-  const [primaryPreset, setPrimaryPreset] = useState<OptimizationPreset>('balanced');
+  const [primaryPreset, setPrimaryPreset] = useState<OptimizationPreset>('constraints');
   const [secondaryPreset, setSecondaryPreset] = useState<OptimizationPreset | null>(null);
   const [builderCharacterClass, setBuilderCharacterClass] = useState<AutoBuildConstraints['characterClass']>(props.snapshot.characterClass);
   const [builderLevel, setBuilderLevel] = useState<number>(props.snapshot.level);
@@ -217,6 +217,10 @@ export function AutoBuilderModal(props: {
   const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
   const diagnosticsRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  const hasAdvancedIdMinMax = customIdThresholds.some(
+    (row) => row.key && row.min != null && row.max != null,
+  );
   const customIdThresholdSeqRef = useRef(1);
 
   const lockedSlots = useMemo(() => {
@@ -859,6 +863,12 @@ export function AutoBuilderModal(props: {
                       Add ID Threshold
                     </Button>
                   </div>
+                  {primaryPreset === 'constraints' && !hasAdvancedIdMinMax ? (
+                    <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] text-amber-50">
+                      Advanced IDs preset is selected as Primary Goal, but no ID has both Min and Max set.
+                      Add at least one ID with a Min and Max, or switch primary goal. You can still run the solver without this.
+                    </div>
+                  ) : null}
                 </div>
               </details>
             </div>

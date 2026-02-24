@@ -100,7 +100,8 @@ export function parseSearchStateFromUrl(url: URL): SearchFilterState {
     viewMode: view ?? DEFAULT_SEARCH_FILTER_STATE.viewMode,
     onlyWearableAtLevel: wear ? Number(wear) : DEFAULT_SEARCH_FILTER_STATE.onlyWearableAtLevel,
     onlyClassCompatible: classCompat === '1',
-    excludeRestricted: exRes === null ? true : exRes !== '0',
+    // Default: include restricted items (false). Legacy links with excludeRestricted=0 still mean "include".
+    excludeRestricted: exRes === null ? false : exRes !== '0',
     categories: cats,
     types,
     tiers,
@@ -218,7 +219,8 @@ export function writeUrlState(args: {
   else params.delete('wearLevel');
   if (search.onlyClassCompatible) params.set('classCompat', '1');
   else params.delete('classCompat');
-  if (!search.excludeRestricted) params.set('excludeRestricted', '0');
+  // Default is excludeRestricted=false (include restricted). Encode true as "1".
+  if (search.excludeRestricted) params.set('excludeRestricted', '1');
   else params.delete('excludeRestricted');
 
   const hasRanges = Object.keys(search.numericRanges).length > 0;
