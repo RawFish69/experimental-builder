@@ -111,5 +111,6 @@ export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   maxStates: 120000,
   useExhaustiveSmallPool: true,
   exhaustiveStateLimit: 250000,
-  allowRestricted: false,
+  // Allow restricted / untradeable items by default in Build Solver.
+  allowRestricted: true,
 };
