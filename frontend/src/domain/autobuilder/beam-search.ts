@@ -14,6 +14,8 @@ interface BeamNode {
   feasibilityAssigned?: number;
   focusSupport?: number[];
   atkTierAssigned?: number;
+  /** Running totals for Advanced: Specific ID min/max constraints (customNumericRanges). */
+  customTotals?: number[];
 }
 
 const TOME_ASSIST_FALLBACKS: Array<[number, number, number, number, number]> = [
@@ -412,8 +414,14 @@ export function thresholdBiasedWeights(
   return w;
 }
 
+/** When user sets Advanced ID min/max, boost rough score for items that help meet those constraints. */
+const CUSTOM_RANGE_MIN_WEIGHT = 3;
+const CUSTOM_RANGE_MAX_WEIGHT = 2;
+/** Much stronger bias when advanced IDs are the primary goal - ensures mr/hr support items dominate. */
+const CUSTOM_RANGE_MIN_WEIGHT_STRONG = 14;
+
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
-  return (
+  let score =
     item.numeric.baseDps * constraints.weights.legacyBaseDps +
     item.roughScoreFields.ehpProxy * constraints.weights.legacyEhp +
     item.roughScoreFields.offense * constraints.weights.dpsProxy +
@@ -421,8 +429,23 @@ function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints)
     item.numeric.spd * constraints.weights.speed +
     item.roughScoreFields.utility * constraints.weights.sustain +
     item.roughScoreFields.skillPointTotal * constraints.weights.skillPointTotal -
-    item.roughScoreFields.reqTotal * constraints.weights.reqTotalPenalty
-  );
+    item.roughScoreFields.reqTotal * constraints.weights.reqTotalPenalty;
+
+  const customRanges = constraints.target.customNumericRanges ?? [];
+  const hasCustomMins = customRanges.some((r) => typeof r.min === 'number');
+  const minWeight = hasCustomMins ? CUSTOM_RANGE_MIN_WEIGHT_STRONG : CUSTOM_RANGE_MIN_WEIGHT;
+  for (const range of customRanges) {
+    const key = range.key?.trim();
+    if (!key) continue;
+    const v = item.numericIndex[key] ?? 0;
+    if (typeof range.min === 'number') {
+      score += v * minWeight;
+    }
+    if (typeof range.max === 'number') {
+      score -= v * CUSTOM_RANGE_MAX_WEIGHT;
+    }
+  }
+  return score;
 }
 
 function canonicalCandidateKey(slots: WorkbenchSnapshot['slots']): string {
@@ -596,6 +619,59 @@ function candidateEntryNumericValue(
   return item.numericIndex[key] ?? 0;
 }
 
+function customTotalsFromSlots(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+  keys: string[],
+): number[] {
+  const totals = keys.map(() => 0);
+  if (keys.length === 0) return totals;
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+    for (let i = 0; i < keys.length; i++) {
+      totals[i] += item.numericIndex[keys[i]] ?? 0;
+    }
+  }
+  return totals;
+}
+
+function buildCustomSuffixBounds(params: {
+  slotOrder: ItemSlot[];
+  candidatePools: Map<ItemSlot, Array<{ id: number; rough: number }>>;
+  catalog: CatalogSnapshot;
+  keys: string[];
+}): { maxSuffix: number[][]; minSuffix: number[][] } {
+  const { slotOrder, candidatePools, catalog, keys } = params;
+  const maxSuffix: number[][] = Array.from({ length: slotOrder.length + 1 }, () => keys.map(() => 0));
+  const minSuffix: number[][] = Array.from({ length: slotOrder.length + 1 }, () => keys.map(() => 0));
+  if (keys.length === 0) return { maxSuffix, minSuffix };
+
+  for (let i = slotOrder.length - 1; i >= 0; i--) {
+    const pool = candidatePools.get(slotOrder[i]) ?? [];
+    const slotMax = keys.map(() => Number.NEGATIVE_INFINITY);
+    const slotMin = keys.map(() => Number.POSITIVE_INFINITY);
+    for (const entry of pool) {
+      const item = catalog.itemsById.get(entry.id);
+      if (!item) continue;
+      for (let k = 0; k < keys.length; k++) {
+        const v = item.numericIndex[keys[k]] ?? 0;
+        if (v > slotMax[k]) slotMax[k] = v;
+        if (v < slotMin[k]) slotMin[k] = v;
+      }
+    }
+    for (let k = 0; k < keys.length; k++) {
+      const maxV = Number.isFinite(slotMax[k]) ? slotMax[k] : 0;
+      const minV = Number.isFinite(slotMin[k]) ? slotMin[k] : 0;
+      maxSuffix[i][k] = maxSuffix[i + 1][k] + maxV;
+      minSuffix[i][k] = minSuffix[i + 1][k] + minV;
+    }
+  }
+  return { maxSuffix, minSuffix };
+}
+
 function buildCandidatePoolForSlot(
   slot: ItemSlot,
   catalog: CatalogSnapshot,
@@ -757,14 +833,14 @@ function buildCandidatePoolForSlot(
   for (const list of customMinSorted) {
     sources.push({
       list,
-      remaining: 12,
+      remaining: 35,
       cursor: 0,
     });
   }
   for (const list of customMaxSorted) {
     sources.push({
       list,
-      remaining: 8,
+      remaining: 20,
       cursor: 0,
     });
   }
@@ -996,6 +1072,11 @@ function runFeasibilityBiasedBeamSearch(params: {
     supportSuffixMax[i] = addNumberVectors(supportSuffixMax[i + 1], slotMax);
   }
 
+  const customSpecs = getCustomRangeSpecs(constraints);
+  const customKeys = customSpecs.map((s) => s.key);
+  const customBounds = buildCustomSuffixBounds({ slotOrder, candidatePools, catalog, keys: customKeys });
+  const baseCustomTotals = customTotalsFromSlots(baseSlots, catalog, customKeys);
+
   let beam: BeamNode[] = [{
     slots: cloneSlots(baseSlots),
     orderIndex: 0,
@@ -1004,6 +1085,7 @@ function runFeasibilityBiasedBeamSearch(params: {
     feasibilityAssigned: 0,
     focusSupport: focusStats.map(() => 0),
     atkTierAssigned: 0,
+    customTotals: baseCustomTotals,
   }];
 
   let processedStates = 0;
@@ -1042,6 +1124,13 @@ function runFeasibilityBiasedBeamSearch(params: {
           node.focusSupport ?? focusStats.map(() => 0),
           item ? focusBonusVectorForItem(item, focusStats) : focusStats.map(() => 0),
         );
+        const nextCustomTotals =
+          customKeys.length > 0
+            ? addNumberVectors(
+                node.customTotals ?? customKeys.map(() => 0),
+                customKeys.map((k) => (item ? item.numericIndex[k] ?? 0 : 0)),
+              )
+            : undefined;
 
         if (
           attackSpeedCtx &&
@@ -1060,6 +1149,23 @@ function runFeasibilityBiasedBeamSearch(params: {
           continue;
         }
 
+        if (customSpecs.length > 0 && nextCustomTotals) {
+          let ok = true;
+          for (let k = 0; k < customSpecs.length; k++) {
+            const spec = customSpecs[k];
+            const cur = nextCustomTotals[k];
+            if (typeof spec.min === 'number' && cur + customBounds.maxSuffix[orderIndex + 1][k] < spec.min) {
+              ok = false;
+              break;
+            }
+            if (typeof spec.max === 'number' && cur + customBounds.minSuffix[orderIndex + 1][k] > spec.max) {
+              ok = false;
+              break;
+            }
+          }
+          if (!ok) continue;
+        }
+
         const partialFeasibility = evaluateBuildSkillpointFeasibility(nextSlots, catalog, constraints.level);
         const nextRoughScore = node.roughScore + entry.rough;
         nextBeam.push({
@@ -1070,6 +1176,7 @@ function runFeasibilityBiasedBeamSearch(params: {
           feasibilityAssigned: partialFeasibility.feasible ? partialFeasibility.assignedTotal : Infinity,
           focusSupport: nextFocusSupport,
           atkTierAssigned: nextAtkTierAssigned,
+          customTotals: nextCustomTotals,
         });
       }
       if (stateBudgetHit) break;
@@ -1255,6 +1362,8 @@ export function runAutoBuildBeamSearch(params: {
   }
   const attackSpeedCtx = buildAttackSpeedReachabilityContext(baseSlots, catalog, constraints);
 
+  const customRangeSpecs = getCustomRangeSpecs(constraints);
+  const hasCustomMinSpecs = customRangeSpecs.some((s) => typeof s.min === 'number');
   const slotOrder = [...unlockedSlots].sort((a, b) => {
     if (attackSpeedCtx?.preferredDirection) {
       const aPool = candidatePools.get(a) ?? [];
@@ -1279,6 +1388,12 @@ export function runAutoBuildBeamSearch(params: {
       const aSupport = computeSlotFocusSupportPotential(a, candidatePools, catalog, supportFocusStats);
       const bSupport = computeSlotFocusSupportPotential(b, candidatePools, catalog, supportFocusStats);
       if (aSupport !== bSupport) return bSupport - aSupport;
+    }
+    if (hasCustomMinSpecs) {
+      const supportSlots: ItemSlot[] = ['ring1', 'ring2', 'bracelet', 'necklace'];
+      const aIsSupport = supportSlots.includes(a);
+      const bIsSupport = supportSlots.includes(b);
+      if (aIsSupport !== bIsSupport) return aIsSupport ? -1 : 1;
     }
     const al = candidatePools.get(a)?.length ?? 0;
     const bl = candidatePools.get(b)?.length ?? 0;
@@ -1327,12 +1442,17 @@ export function runAutoBuildBeamSearch(params: {
     });
   }
 
+  const customSpecs2 = getCustomRangeSpecs(constraints);
+  const customKeys2 = customSpecs2.map((s) => s.key);
+  const customBounds2 = buildCustomSuffixBounds({ slotOrder, candidatePools, catalog, keys: customKeys2 });
+
   let beam: BeamNode[] = [{
     slots: baseSlots,
     orderIndex: 0,
     roughScore: 0,
     optimisticBound: suffixMax[0],
     atkTierAssigned: 0,
+    customTotals: customTotalsFromSlots(baseSlots, catalog, customKeys2),
   }];
 
   const atkTierBounds = attackSpeedCtx ? buildAtkTierSuffixBounds(slotOrder, candidatePools, catalog) : null;
@@ -1371,6 +1491,13 @@ export function runAutoBuildBeamSearch(params: {
         const nextRoughScore = node.roughScore + entry.rough;
         const item = catalog.itemsById.get(entry.id);
         const nextAtkTierAssigned = (node.atkTierAssigned ?? 0) + (item ? normalizedAtkTier(item) : 0);
+        const nextCustomTotals =
+          customKeys2.length > 0
+            ? addNumberVectors(
+                node.customTotals ?? customKeys2.map(() => 0),
+                customKeys2.map((k) => (item ? item.numericIndex[k] ?? 0 : 0)),
+              )
+            : undefined;
         if (
           attackSpeedCtx &&
           atkTierBounds &&
@@ -1383,12 +1510,29 @@ export function runAutoBuildBeamSearch(params: {
         ) {
           continue;
         }
+        if (customSpecs2.length > 0 && nextCustomTotals) {
+          let ok = true;
+          for (let k = 0; k < customSpecs2.length; k++) {
+            const spec = customSpecs2[k];
+            const cur = nextCustomTotals[k];
+            if (typeof spec.min === 'number' && cur + customBounds2.maxSuffix[orderIndex + 1][k] < spec.min) {
+              ok = false;
+              break;
+            }
+            if (typeof spec.max === 'number' && cur + customBounds2.minSuffix[orderIndex + 1][k] > spec.max) {
+              ok = false;
+              break;
+            }
+          }
+          if (!ok) continue;
+        }
         nextBeam.push({
           slots: nextSlots,
           orderIndex: orderIndex + 1,
           roughScore: nextRoughScore,
           optimisticBound: nextRoughScore + suffixMax[orderIndex + 1],
           atkTierAssigned: nextAtkTierAssigned,
+          customTotals: nextCustomTotals,
         });
       }
       if (stateBudgetHit) break;
@@ -1475,26 +1619,30 @@ export function runAutoBuildBeamSearch(params: {
           : 'Retrying with feasibility-first beam search (support-aware rescue for high-skill requirements).',
     });
 
+    const fallbackConstraints: AutoBuildConstraints = {
+      ...constraints,
+      maxStates: Math.max(
+        constraints.maxStates,
+        thresholdRescue
+          ? Math.min(18_000_000, constraints.maxStates * 5)
+          : constraints.weaponAttackSpeeds.length > 0
+          ? Math.min(16_000_000, constraints.maxStates * 4)
+          : Math.min(8_000_000, constraints.maxStates * 2),
+      ),
+      beamWidth: Math.max(
+        constraints.beamWidth,
+        thresholdRescue ? 3600 : constraints.weaponAttackSpeeds.length > 0 ? 3200 : 1800,
+      ),
+    };
+    if (thresholdRescue) {
+      fallbackConstraints.weights = thresholdBiasedWeights(constraints.target, constraints.weights);
+    }
     const fallback = runFeasibilityBiasedBeamSearch({
       slotOrder,
       candidatePools,
       baseSlots,
       catalog,
-      constraints: {
-        ...constraints,
-        maxStates: Math.max(
-          constraints.maxStates,
-          thresholdRescue
-            ? Math.min(18_000_000, constraints.maxStates * 5)
-            : constraints.weaponAttackSpeeds.length > 0
-            ? Math.min(16_000_000, constraints.maxStates * 4)
-            : Math.min(8_000_000, constraints.maxStates * 2),
-        ),
-        beamWidth: Math.max(
-          constraints.beamWidth,
-          thresholdRescue ? 3600 : constraints.weaponAttackSpeeds.length > 0 ? 3200 : 1800,
-        ),
-      },
+      constraints: fallbackConstraints,
       focusStats: supportFocusStats,
       attackSpeedCtx,
       onProgress,

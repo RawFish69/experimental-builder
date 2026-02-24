@@ -105,7 +105,7 @@ export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   minPowderSlots: null,
   onlyPinnedItems: false,
   weights: DEFAULT_AUTO_BUILDER_WEIGHTS,
-  topN: 20,
+  topN: 50,
   topKPerSlot: 80,
   beamWidth: 350,
   maxStates: 120000,

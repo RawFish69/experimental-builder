@@ -58,7 +58,7 @@ function parseRejectStatsFromDetail(detail: string | undefined): { spInvalid: nu
 }
 
 const WEAPON_ATTACK_SPEED_OPTIONS = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
-type OptimizationPreset = 'balanced' | 'damage' | 'tank' | 'spell' | 'melee' | 'speed' | 'sustain';
+type OptimizationPreset = 'balanced' | 'damage' | 'tank' | 'spell' | 'melee' | 'speed' | 'sustain' | 'constraints';
 type SolverStrategy = 'auto' | 'fast' | 'constraint' | 'exhaustive';
 type CustomIdThresholdRow = {
   id: number;
@@ -68,6 +68,7 @@ type CustomIdThresholdRow = {
 };
 
 const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
+  constraints: 'Advanced IDs only',
   balanced: 'Balanced',
   damage: 'Damage',
   tank: 'Tank / EHP',
@@ -77,12 +78,18 @@ const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
   sustain: 'Sustain',
 };
 
+const PRIMARY_GOAL_ORDER: OptimizationPreset[] = ['constraints', 'balanced', 'damage', 'tank', 'spell', 'melee', 'speed', 'sustain'];
+const SECONDARY_GOAL_OPTIONS: OptimizationPreset[] = ['balanced', 'damage', 'tank', 'spell', 'melee', 'speed', 'sustain'];
+
 const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
-  auto: 'Auto (Recommended)',
+  auto: 'All',
   fast: 'Fast',
   constraint: 'Constraint-first',
   exhaustive: 'Exhaustive-ish',
 };
+
+const SOLVER_STRATEGY_ORDER: SolverStrategy[] = ['auto', 'fast', 'constraint', 'exhaustive'];
+const NON_AUTO_STRATEGIES: SolverStrategy[] = ['fast', 'constraint', 'exhaustive'];
 
 function formatNumericIdLabel(key: string): string {
   const labels: Record<string, string> = {
@@ -134,6 +141,18 @@ function presetWeightDelta(preset: OptimizationPreset): AutoBuildConstraints['we
       return { ...base, legacyBaseDps: 0.8, legacyEhp: 0.5, dpsProxy: 0.9, ehpProxy: 0.45, speed: 2.0, sustain: 0.5 };
     case 'sustain':
       return { ...base, legacyBaseDps: 0.7, legacyEhp: 1.0, dpsProxy: 0.7, ehpProxy: 1.0, speed: 0.3, sustain: 2.0 };
+    case 'constraints':
+      return {
+        ...base,
+        legacyBaseDps: 0.25,
+        legacyEhp: 0.25,
+        dpsProxy: 0.25,
+        ehpProxy: 0.25,
+        speed: 0.25,
+        sustain: 0.25,
+        skillPointTotal: 0.25,
+        reqTotalPenalty: 0.25,
+      };
     case 'balanced':
     default:
       return base;
@@ -185,7 +204,7 @@ export function AutoBuilderModal(props: {
   const [beamWidth, setBeamWidth] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.beamWidth);
   const [topKPerSlot, setTopKPerSlot] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.topKPerSlot);
   const [topN, setTopN] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.topN);
-  const [solverStrategy, setSolverStrategy] = useState<SolverStrategy>('auto');
+  const [solverStrategies, setSolverStrategies] = useState<SolverStrategy[]>(['auto']);
 
   const [results, setResults] = useState<AutoBuildCandidate[]>([]);
   const [progress, setProgress] = useState<string>('');
@@ -315,17 +334,24 @@ export function AutoBuilderModal(props: {
         exhaustiveStateLimit: Math.max(baseConstraints.exhaustiveStateLimit, 2000000),
       };
 
-      switch (solverStrategy) {
-        case 'fast':
-          return [fast];
-        case 'constraint':
-          return deepFallbackEnabled ? [constraintPass, constraintDeep, exhaustive] : [constraintPass];
-        case 'exhaustive':
-          return deepFallbackEnabled ? [constraintPass, exhaustive] : [exhaustive];
-        case 'auto':
-        default:
-          return [fast, ...(deepFallbackEnabled ? [deep, bruteish, feasibilityRescue] : [])];
+      const forStrategy = (strategy: SolverStrategy): Attempt[] => {
+        switch (strategy) {
+          case 'fast':
+            return [fast];
+          case 'constraint':
+            return deepFallbackEnabled ? [constraintPass, constraintDeep, exhaustive] : [constraintPass];
+          case 'exhaustive':
+            return deepFallbackEnabled ? [constraintPass, exhaustive] : [exhaustive];
+          case 'auto':
+          default:
+            return [fast, ...(deepFallbackEnabled ? [deep, bruteish, feasibilityRescue] : [])];
+        }
+      };
+      const strategies = solverStrategies.length > 0 ? solverStrategies : ['auto'];
+      if (strategies.length === 1 && strategies[0] === 'auto') {
+        return forStrategy('auto');
       }
+      return strategies.flatMap((s) => forStrategy(s));
     })();
 
     let lastCandidates: AutoBuildCandidate[] = [];
@@ -487,8 +513,8 @@ export function AutoBuilderModal(props: {
       onlyPinnedItems,
       useExhaustiveSmallPool,
       exhaustiveStateLimit: Math.max(1000, Math.min(5000000, exhaustiveStateLimit)),
-      weights: combinePresetWeights(primaryPreset, secondaryPreset),
-      topN: Math.max(1, Math.min(50, topN)),
+      weights: combinePresetWeights(primaryPreset, primaryPreset === 'constraints' ? null : secondaryPreset),
+      topN: Math.max(1, Math.min(150, topN)),
       topKPerSlot: Math.max(10, Math.min(300, topKPerSlot)),
       beamWidth: Math.max(20, Math.min(5000, beamWidth)),
     };
@@ -660,8 +686,8 @@ export function AutoBuilderModal(props: {
           ) : null}
         </div>
       ) : null}
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr] lg:items-start">
-        <div className="grid min-w-0 gap-3">
+      <div className="grid h-[52vh] min-h-0 gap-4 overflow-hidden lg:h-[56vh] lg:grid-cols-[1fr_1fr] lg:items-stretch">
+        <div className="grid h-full min-h-0 min-w-0 gap-3 overflow-auto pr-1 wb-scrollbar">
           {showTips ? (
             <div className="wb-card p-3">
               <div className="mb-2 text-sm font-semibold">Tips (New Players)</div>
@@ -681,26 +707,35 @@ export function AutoBuilderModal(props: {
               <div>
                 <FieldLabel>Primary Goal</FieldLabel>
                 <div className="flex flex-wrap gap-2">
-                  {(Object.keys(OPTIMIZATION_PRESET_LABELS) as OptimizationPreset[]).map((preset) => (
-                    <ChipButton key={preset} active={primaryPreset === preset} onClick={() => setPrimaryPreset(preset)}>
+                  {PRIMARY_GOAL_ORDER.map((preset) => (
+                    <ChipButton
+                      key={preset}
+                      active={primaryPreset === preset}
+                      onClick={() => {
+                        setPrimaryPreset(preset);
+                        if (preset === 'constraints') setSecondaryPreset(null);
+                      }}
+                    >
                       {OPTIMIZATION_PRESET_LABELS[preset]}
                     </ChipButton>
                   ))}
                 </div>
               </div>
-              <div>
-                <FieldLabel>Secondary Goal (optional)</FieldLabel>
-                <div className="flex flex-wrap gap-2">
-                  <ChipButton active={secondaryPreset === null} onClick={() => setSecondaryPreset(null)}>
-                    None
-                  </ChipButton>
-                  {(Object.keys(OPTIMIZATION_PRESET_LABELS) as OptimizationPreset[]).map((preset) => (
-                    <ChipButton key={preset} active={secondaryPreset === preset} onClick={() => setSecondaryPreset(preset)}>
-                      {OPTIMIZATION_PRESET_LABELS[preset]}
+              {primaryPreset !== 'constraints' ? (
+                <div>
+                  <FieldLabel>Secondary Goal (optional)</FieldLabel>
+                  <div className="flex flex-wrap gap-2">
+                    <ChipButton active={secondaryPreset === null} onClick={() => setSecondaryPreset(null)}>
+                      None
                     </ChipButton>
-                  ))}
+                    {SECONDARY_GOAL_OPTIONS.map((preset) => (
+                      <ChipButton key={preset} active={secondaryPreset === preset} onClick={() => setSecondaryPreset(preset)}>
+                        {OPTIMIZATION_PRESET_LABELS[preset]}
+                      </ChipButton>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
                 Build Solver always filters out builds that fail skill point/equip-order feasibility. You do not need to set a minimum SP total.
               </div>
@@ -831,6 +866,64 @@ export function AutoBuilderModal(props: {
           </div>
 
           <div className="wb-card p-3">
+            <div className="mb-3 text-sm font-semibold">Solver Strategy</div>
+            <div className="grid gap-3">
+              <div>
+                <FieldLabel>Strategies (select one or more; All is exclusive)</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  {SOLVER_STRATEGY_ORDER.map((strategy) => {
+                    const isAll = strategy === 'auto';
+                    const isAllSelected = solverStrategies.length === 1 && solverStrategies[0] === 'auto';
+                    const active = isAll ? isAllSelected : solverStrategies.includes(strategy);
+                    const disabled = isAll && !isAllSelected;
+                    return (
+                      <ChipButton
+                        key={strategy}
+                        active={active}
+                        disabled={disabled}
+                        onClick={() => {
+                          if (disabled) return;
+                          if (isAll) {
+                            setSolverStrategies(['auto']);
+                            return;
+                          }
+                          if (isAllSelected) {
+                            setSolverStrategies([strategy]);
+                            return;
+                          }
+                          const has = solverStrategies.includes(strategy);
+                          const next = has
+                            ? solverStrategies.filter((s) => s !== strategy)
+                            : [...solverStrategies, strategy];
+                          const allThree =
+                            next.length === 3 &&
+                            next.includes('fast') &&
+                            next.includes('constraint') &&
+                            next.includes('exhaustive');
+                          setSolverStrategies(next.length > 0 ? (allThree ? ['auto'] : next) : ['auto']);
+                        }}
+                      >
+                        {SOLVER_STRATEGY_LABELS[strategy]}
+                      </ChipButton>
+                    );
+                  })}
+                </div>
+                <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                  {solverStrategies.length === 1 && solverStrategies[0] === 'auto'
+                    ? 'Starts fast, then retries deeper if needed.'
+                    : solverStrategies.includes('fast') && !solverStrategies.includes('constraint') && !solverStrategies.includes('exhaustive')
+                      ? 'Single fast pass. Lowest wait time, weakest fallback.'
+                      : solverStrategies.includes('constraint')
+                        ? 'Constraint-first helps strict attack-speed or advanced ID min/max.'
+                        : solverStrategies.includes('exhaustive')
+                          ? 'Exhaustive-ish: highest search budget, strongest fallback.'
+                          : 'Selected strategies run in order (fast → constraint → exhaustive).'}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="wb-card p-3">
             <div className="mb-3 text-sm font-semibold">Pool Filters</div>
             <div className="grid gap-3">
               <NumberField label="Min Powder Slots" value={minPowderSlots} onChange={setMinPowderSlots} min={0} max={6} />
@@ -932,29 +1025,6 @@ export function AutoBuilderModal(props: {
           <div className="wb-card p-3">
             <div className="mb-3 text-sm font-semibold">Search Heuristics</div>
             <div className="grid gap-3">
-              <div>
-                <FieldLabel>Solver Strategy</FieldLabel>
-                <select
-                  className="wb-select"
-                  value={solverStrategy}
-                  onChange={(e) => setSolverStrategy(e.target.value as SolverStrategy)}
-                >
-                  {(Object.keys(SOLVER_STRATEGY_LABELS) as SolverStrategy[]).map((strategy) => (
-                    <option key={strategy} value={strategy}>
-                      {SOLVER_STRATEGY_LABELS[strategy]}
-                    </option>
-                  ))}
-                </select>
-                <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                  {solverStrategy === 'auto'
-                    ? 'Starts fast, then retries deeper if needed.'
-                    : solverStrategy === 'fast'
-                      ? 'Single fast pass. Lowest wait time, weakest fallback.'
-                      : solverStrategy === 'constraint'
-                        ? 'Better for strict attack-speed or advanced ID min/max constraints.'
-                        : 'Highest search budget and broader retries. Slowest, but strongest fallback.'}
-                </div>
-              </div>
               <ChipButton active={deepFallbackEnabled} onClick={() => setDeepFallbackEnabled((prev) => !prev)}>
                 Deep fallback if 0 results
               </ChipButton>
@@ -987,12 +1057,14 @@ export function AutoBuilderModal(props: {
                 value={topN}
                 onChange={(v) => setTopN(v ?? DEFAULT_AUTO_BUILD_CONSTRAINTS.topN)}
                 min={1}
-                max={50}
+                max={150}
               />
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
                 Locked slots from the Workbench will be preserved. Current locks: {Object.values(lockedSlots).filter(Boolean).length}
                 {onlyPinnedItems ? ' | Candidate pools restricted to pinned bins.' : ''}
-                {solverStrategy !== 'auto' ? ` | Strategy: ${SOLVER_STRATEGY_LABELS[solverStrategy]}.` : ''}
+                {solverStrategies.length > 0 && !(solverStrategies.length === 1 && solverStrategies[0] === 'auto')
+                  ? ` | Strategy: ${solverStrategies.map((s) => SOLVER_STRATEGY_LABELS[s]).join(' → ')}.`
+                  : ''}
                 {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ''}
                 {useExhaustiveSmallPool ? ` | Exact enumeration is used automatically when pool combinations are <= ${Math.round(exhaustiveStateLimit).toLocaleString()}.` : ''}
               </div>
@@ -1000,14 +1072,14 @@ export function AutoBuilderModal(props: {
           </div>
         </div>
 
-        <div className="grid min-h-0 min-w-0 auto-rows-min gap-3 self-start">
-          <div className="wb-card flex min-h-0 flex-col overflow-hidden p-3">
+        <div className="h-full min-h-0 min-w-0">
+          <div className="wb-card flex h-full min-h-0 flex-col overflow-hidden p-3">
             <div className="mb-3 flex items-center justify-between">
               <div className="text-sm font-semibold">Candidates</div>
               <div className="text-xs text-[var(--wb-muted)]">{results.length} shown</div>
             </div>
 
-            <div className="min-h-0 space-y-2 overflow-auto pr-1 wb-scrollbar max-h-[52vh] lg:max-h-[56vh]">
+            <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 wb-scrollbar">
               {results.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
                   Run Build Solver to generate candidate builds.

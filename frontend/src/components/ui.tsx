@@ -50,15 +50,22 @@ export function FieldLabel(props: PropsWithChildren<{ className?: string }>) {
 }
 
 export function ChipButton(
-  props: PropsWithChildren<{ active?: boolean; onClick?: () => void; className?: string; title?: string }>,
+  props: PropsWithChildren<{
+    active?: boolean;
+    disabled?: boolean;
+    onClick?: () => void;
+    className?: string;
+    title?: string;
+  }>,
 ) {
   return (
     <button
       type="button"
-      className={cn('wb-chip', props.className)}
+      className={cn('wb-chip', props.className, props.disabled && 'opacity-50 cursor-not-allowed')}
       data-active={props.active ? 'true' : 'false'}
-      onClick={props.onClick}
+      onClick={props.disabled ? undefined : props.onClick}
       title={props.title}
+      disabled={props.disabled}
     >
       {props.children}
     </button>
