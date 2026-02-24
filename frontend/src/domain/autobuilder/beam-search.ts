@@ -12,7 +12,14 @@ interface BeamNode {
   optimisticBound: number;
   feasibilityAssigned?: number;
   focusSupport?: number[];
+  atkTierAssigned?: number;
 }
+
+const TOME_ASSIST_FALLBACKS: Array<[number, number, number, number, number]> = [
+  [10, 10, 10, 10, 10],
+  [20, 20, 20, 20, 20],
+  [30, 30, 30, 30, 30],
+];
 
 type SkillStatKey = 'str' | 'dex' | 'int' | 'def' | 'agi';
 
@@ -23,6 +30,7 @@ interface CandidatePoolEntry {
   skillPointTotal: number;
   utility: number;
   level: number;
+  atkTier: number;
   spStr: number;
   spDex: number;
   spInt: number;
@@ -31,8 +39,33 @@ interface CandidatePoolEntry {
   supportFocus: number;
 }
 
+interface CustomRangeSpec {
+  key: string;
+  min?: number;
+  max?: number;
+}
+
+interface AttackSpeedReachabilityContext {
+  baseSpeedIndex: number;
+  fixedAtkTierTotal: number;
+  allowedFinalIndices: number[];
+  allowedFinalIndexSet: Set<number>;
+  preferredDirection: -1 | 0 | 1;
+}
+
+type FinalHardConstraintReason = 'attackSpeed' | 'thresholds' | 'item';
+
+interface FinalHardConstraintCheck {
+  ok: boolean;
+  reason?: FinalHardConstraintReason;
+}
+
 const SKILL_STATS: SkillStatKey[] = ['str', 'dex', 'int', 'def', 'agi'];
 const WEAPON_ATTACK_SPEED_ORDER = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
+
+function normalizedAtkTier(item: NormalizedItem): number {
+  return Math.round(item.numeric.atkTier || 0);
+}
 
 function positiveStatBonus(item: NormalizedItem, stat: SkillStatKey): number {
   switch (stat) {
@@ -98,16 +131,159 @@ function computeFinalWeaponAttackSpeed(
     if (itemId == null) continue;
     const item = catalog.itemsById.get(itemId);
     if (!item) continue;
-    totalAtkTier += Math.round(item.numeric.atkTier || 0);
+    totalAtkTier += normalizedAtkTier(item);
   }
 
   const finalIndex = Math.max(0, Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, baseIndex + totalAtkTier));
   return WEAPON_ATTACK_SPEED_ORDER[finalIndex];
 }
 
+function computeTotalAtkTier(slots: WorkbenchSnapshot['slots'], catalog: CatalogSnapshot): number {
+  let total = 0;
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+    total += normalizedAtkTier(item);
+  }
+  return total;
+}
+
+function buildAttackSpeedReachabilityContext(
+  baseSlots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+  constraints: AutoBuildConstraints,
+): AttackSpeedReachabilityContext | null {
+  if (constraints.weaponAttackSpeeds.length === 0) return null;
+  const weaponId = baseSlots.weapon;
+  if (weaponId == null) return null;
+  const weapon = catalog.itemsById.get(weaponId);
+  if (!weapon) return null;
+  const baseSpeedIndex = WEAPON_ATTACK_SPEED_ORDER.indexOf(
+    weapon.atkSpd as (typeof WEAPON_ATTACK_SPEED_ORDER)[number],
+  );
+  if (baseSpeedIndex < 0) return null;
+
+  const allowedFinalIndices = [...new Set(
+    constraints.weaponAttackSpeeds
+      .map((speed) => WEAPON_ATTACK_SPEED_ORDER.indexOf(speed as (typeof WEAPON_ATTACK_SPEED_ORDER)[number]))
+      .filter((index): index is number => index >= 0),
+  )].sort((a, b) => a - b);
+  if (allowedFinalIndices.length === 0) return null;
+
+  const fixedAtkTierTotal = computeTotalAtkTier(baseSlots, catalog);
+  const currentClampedFinal = Math.max(0, Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, baseSpeedIndex + fixedAtkTierTotal));
+  let preferredDirection: -1 | 0 | 1 = 0;
+  if (!allowedFinalIndices.includes(currentClampedFinal)) {
+    const nearest = allowedFinalIndices.reduce((best, idx) =>
+      Math.abs(idx - currentClampedFinal) < Math.abs(best - currentClampedFinal) ? idx : best,
+    allowedFinalIndices[0]);
+    preferredDirection = nearest > currentClampedFinal ? 1 : nearest < currentClampedFinal ? -1 : 0;
+  }
+
+  return {
+    baseSpeedIndex,
+    fixedAtkTierTotal,
+    allowedFinalIndices,
+    allowedFinalIndexSet: new Set(allowedFinalIndices),
+    preferredDirection,
+  };
+}
+
+function buildAtkTierSuffixBounds(
+  order: ItemSlot[],
+  candidatePools: Map<ItemSlot, Array<{ id: number; rough: number }>>,
+  catalog: CatalogSnapshot,
+): { minSuffix: number[]; maxSuffix: number[] } {
+  const minSuffix = new Array(order.length + 1).fill(0);
+  const maxSuffix = new Array(order.length + 1).fill(0);
+  for (let i = order.length - 1; i >= 0; i--) {
+    const pool = candidatePools.get(order[i]) ?? [];
+    let slotMin = 0;
+    let slotMax = 0;
+    if (pool.length > 0) {
+      slotMin = Infinity;
+      slotMax = -Infinity;
+      for (const entry of pool) {
+        const item = catalog.itemsById.get(entry.id);
+        const atkTier = item ? normalizedAtkTier(item) : 0;
+        if (atkTier < slotMin) slotMin = atkTier;
+        if (atkTier > slotMax) slotMax = atkTier;
+      }
+      if (!Number.isFinite(slotMin)) slotMin = 0;
+      if (!Number.isFinite(slotMax)) slotMax = 0;
+    }
+    minSuffix[i] = minSuffix[i + 1] + slotMin;
+    maxSuffix[i] = maxSuffix[i + 1] + slotMax;
+  }
+  return { minSuffix, maxSuffix };
+}
+
+function canStillReachAllowedAttackSpeed(
+  ctx: AttackSpeedReachabilityContext,
+  partialAssignedAtkTier: number,
+  remainingMinAtkTier: number,
+  remainingMaxAtkTier: number,
+): boolean {
+  const minTotalAtkTier = ctx.fixedAtkTierTotal + partialAssignedAtkTier + remainingMinAtkTier;
+  const maxTotalAtkTier = ctx.fixedAtkTierTotal + partialAssignedAtkTier + remainingMaxAtkTier;
+  const low = Math.min(minTotalAtkTier, maxTotalAtkTier);
+  const high = Math.max(minTotalAtkTier, maxTotalAtkTier);
+  for (let atkTier = low; atkTier <= high; atkTier++) {
+    const finalIndex = Math.max(0, Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, ctx.baseSpeedIndex + atkTier));
+    if (ctx.allowedFinalIndexSet.has(finalIndex)) return true;
+  }
+  return false;
+}
+
+function attackSpeedBiasValue(
+  ctx: AttackSpeedReachabilityContext | null,
+  assignedAtkTier: number | undefined,
+  remainingMinAtkTier = 0,
+  remainingMaxAtkTier = 0,
+): number {
+  if (!ctx || !ctx.preferredDirection) return 0;
+  const total = ctx.fixedAtkTierTotal + (assignedAtkTier ?? 0);
+  const minFinalIndex = Math.max(
+    0,
+    Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, ctx.baseSpeedIndex + total + remainingMinAtkTier),
+  );
+  const maxFinalIndex = Math.max(
+    0,
+    Math.min(WEAPON_ATTACK_SPEED_ORDER.length - 1, ctx.baseSpeedIndex + total + remainingMaxAtkTier),
+  );
+  const low = Math.min(minFinalIndex, maxFinalIndex);
+  const high = Math.max(minFinalIndex, maxFinalIndex);
+
+  let bestDistance = Infinity;
+  let worstDistance = 0;
+  for (let idx = low; idx <= high; idx++) {
+    let distanceToAllowed = Infinity;
+    for (const allowedIndex of ctx.allowedFinalIndices) {
+      const distance = Math.abs(allowedIndex - idx);
+      if (distance < distanceToAllowed) distanceToAllowed = distance;
+    }
+    if (distanceToAllowed < bestDistance) bestDistance = distanceToAllowed;
+    if (distanceToAllowed > worstDistance) worstDistance = distanceToAllowed;
+  }
+  if (!Number.isFinite(bestDistance)) return 0;
+
+  // If every possible final speed tier for this branch (given remaining slots) is already allowed,
+  // stop prioritizing extra atkTier and let damage / objective score rank it.
+  if (worstDistance === 0) return 0;
+
+  // Otherwise, bias toward branches that reduce the worst-case miss and preserve safety margin
+  // in the preferred direction (important for SUPER_FAST targets with later negative atkTier items).
+  const safetyProgress = ctx.preferredDirection > 0 ? low : -high;
+  return -worstDistance * 1_000 - bestDistance * 100 + safetyProgress;
+}
+
 function summarySatisfiesTargetThresholds(
   summary: ReturnType<typeof evaluateBuild>,
   constraints: AutoBuildConstraints,
+  slots?: WorkbenchSnapshot['slots'],
+  catalog?: CatalogSnapshot,
 ): boolean {
   const { target } = constraints;
   if (typeof target.minLegacyBaseDps === 'number' && summary.derived.legacyBaseDps < target.minLegacyBaseDps) return false;
@@ -119,32 +295,52 @@ function summarySatisfiesTargetThresholds(
   if (typeof target.minSpeed === 'number' && summary.aggregated.speed < target.minSpeed) return false;
   if (typeof target.minSkillPointTotal === 'number' && summary.derived.skillPointTotal < target.minSkillPointTotal) return false;
   if (typeof target.maxReqTotal === 'number' && summary.derived.reqTotal > target.maxReqTotal) return false;
+  if ((target.customNumericRanges?.length ?? 0) > 0 && slots && catalog) {
+    for (const range of target.customNumericRanges ?? []) {
+      const key = range.key?.trim();
+      if (!key) continue;
+      let total = 0;
+      for (const slot of ITEM_SLOTS) {
+        const itemId = slots[slot];
+        if (itemId == null) continue;
+        const item = catalog.itemsById.get(itemId);
+        if (!item) continue;
+        total += item.numericIndex[key] ?? 0;
+      }
+      if (typeof range.min === 'number' && total < range.min) return false;
+      if (typeof range.max === 'number' && total > range.max) return false;
+    }
+  }
   return true;
 }
 
-function slotsSatisfyFinalHardConstraints(
+function validateFinalHardConstraints(
   slots: WorkbenchSnapshot['slots'],
   catalog: CatalogSnapshot,
   constraints: AutoBuildConstraints,
   summary: ReturnType<typeof evaluateBuild>,
-): boolean {
+): FinalHardConstraintCheck {
   for (const slot of ITEM_SLOTS) {
     const itemId = slots[slot];
     if (itemId == null) continue;
     const item = catalog.itemsById.get(itemId);
-    if (!item) return false;
+    if (!item) return { ok: false, reason: 'item' };
     // Recheck item-level hard constraints on locked / must-include items too.
-    if (!itemMatchesGlobalConstraints(item, constraints)) return false;
+    if (!itemMatchesGlobalConstraints(item, constraints)) return { ok: false, reason: 'item' };
   }
 
   if (constraints.weaponAttackSpeeds.length > 0) {
     const finalAttackSpeed = computeFinalWeaponAttackSpeed(slots, catalog);
     if (!finalAttackSpeed || !constraints.weaponAttackSpeeds.includes(finalAttackSpeed)) {
-      return false;
+      return { ok: false, reason: 'attackSpeed' };
     }
   }
 
-  return summarySatisfiesTargetThresholds(summary, constraints);
+  if (!summarySatisfiesTargetThresholds(summary, constraints, slots, catalog)) {
+    return { ok: false, reason: 'thresholds' };
+  }
+
+  return { ok: true };
 }
 
 function itemMatchesGlobalConstraints(item: NormalizedItem, constraints: AutoBuildConstraints): boolean {
@@ -324,6 +520,26 @@ function computeSlotFocusSupportPotential(
   return best;
 }
 
+function getCustomRangeSpecs(constraints: AutoBuildConstraints): CustomRangeSpec[] {
+  return (constraints.target.customNumericRanges ?? [])
+    .map((row) => ({
+      key: (row.key ?? '').trim(),
+      min: typeof row.min === 'number' ? row.min : undefined,
+      max: typeof row.max === 'number' ? row.max : undefined,
+    }))
+    .filter((row) => row.key && (typeof row.min === 'number' || typeof row.max === 'number'));
+}
+
+function candidateEntryNumericValue(
+  entry: CandidatePoolEntry,
+  catalog: CatalogSnapshot,
+  key: string,
+): number {
+  const item = catalog.itemsById.get(entry.id);
+  if (!item) return 0;
+  return item.numericIndex[key] ?? 0;
+}
+
 function buildCandidatePoolForSlot(
   slot: ItemSlot,
   catalog: CatalogSnapshot,
@@ -332,6 +548,7 @@ function buildCandidatePoolForSlot(
   focusStats: SkillStatKey[] = [],
 ): Array<{ id: number; rough: number }> {
   const all: CandidatePoolEntry[] = [];
+  const customRangeSpecs = getCustomRangeSpecs(constraints);
   for (const item of catalog.items) {
     if (!itemFitsSlot(item, slot)) continue;
     if (allowedPinnedIdsForSlot && !allowedPinnedIdsForSlot.has(item.id)) continue;
@@ -343,6 +560,7 @@ function buildCandidatePoolForSlot(
       skillPointTotal: item.roughScoreFields.skillPointTotal,
       utility: item.roughScoreFields.utility + item.numeric.spd * 0.8,
       level: item.level,
+      atkTier: normalizedAtkTier(item),
       spStr: item.numeric.spStr,
       spDex: item.numeric.spDex,
       spInt: item.numeric.spInt,
@@ -371,6 +589,18 @@ function buildCandidatePoolForSlot(
     if (a.reqTotal !== b.reqTotal) return a.reqTotal - b.reqTotal;
     return a.id - b.id;
   });
+  const attackSpeedSupportSorted =
+    constraints.weaponAttackSpeeds.length > 0
+      ? [...all].sort((a, b) => {
+          const aPos = Math.max(0, a.atkTier);
+          const bPos = Math.max(0, b.atkTier);
+          if (aPos !== bPos) return bPos - aPos;
+          if (a.atkTier !== b.atkTier) return b.atkTier - a.atkTier;
+          if (a.reqTotal !== b.reqTotal) return a.reqTotal - b.reqTotal;
+          if (a.skillPointTotal !== b.skillPointTotal) return b.skillPointTotal - a.skillPointTotal;
+          return a.id - b.id;
+        })
+      : [];
   const focusSupportSorted =
     focusStats.length > 0
       ? [...all].sort((a, b) => {
@@ -400,6 +630,30 @@ function buildCandidatePoolForSlot(
       return a.id - b.id;
     }),
   );
+  const customMinSorted = customRangeSpecs
+    .filter((spec) => typeof spec.min === 'number')
+    .map((spec) =>
+      [...all].sort((a, b) => {
+        const av = candidateEntryNumericValue(a, catalog, spec.key);
+        const bv = candidateEntryNumericValue(b, catalog, spec.key);
+        if (av !== bv) return bv - av;
+        if (a.reqTotal !== b.reqTotal) return a.reqTotal - b.reqTotal;
+        if (a.skillPointTotal !== b.skillPointTotal) return b.skillPointTotal - a.skillPointTotal;
+        return a.id - b.id;
+      }),
+    );
+  const customMaxSorted = customRangeSpecs
+    .filter((spec) => typeof spec.max === 'number')
+    .map((spec) =>
+      [...all].sort((a, b) => {
+        const av = candidateEntryNumericValue(a, catalog, spec.key);
+        const bv = candidateEntryNumericValue(b, catalog, spec.key);
+        if (av !== bv) return av - bv;
+        if (a.reqTotal !== b.reqTotal) return a.reqTotal - b.reqTotal;
+        if (a.skillPointTotal !== b.skillPointTotal) return b.skillPointTotal - a.skillPointTotal;
+        return a.id - b.id;
+      }),
+    );
 
   const target = Math.max(10, constraints.topKPerSlot);
   const diversityBudget = Math.min(140, Math.max(40, Math.floor(target * 0.8)));
@@ -407,7 +661,8 @@ function buildCandidatePoolForSlot(
     all.length,
     target +
       diversityBudget +
-      (focusStats.length > 0 ? Math.min(60, focusStats.length * 12) : 0),
+      (focusStats.length > 0 ? Math.min(60, focusStats.length * 12) : 0) +
+      Math.min(80, customRangeSpecs.length * 14),
   );
   const picks = new Map<number, { id: number; rough: number }>();
   const seedRough = Math.min(12, Math.floor(target * 0.4), roughSorted.length);
@@ -422,6 +677,13 @@ function buildCandidatePoolForSlot(
     { list: spSupportSorted, remaining: Math.floor(diversityBudget * 0.24), cursor: 0 },
     { list: utilitySorted, remaining: Math.floor(diversityBudget * 0.18), cursor: 0 },
   ];
+  if (attackSpeedSupportSorted.length > 0) {
+    sources.push({
+      list: attackSpeedSupportSorted,
+      remaining: Math.max(18, Math.floor(diversityBudget * 0.22)),
+      cursor: 0,
+    });
+  }
   if (focusSupportSorted.length > 0) {
     sources.push({
       list: focusSupportSorted,
@@ -433,6 +695,20 @@ function buildCandidatePoolForSlot(
     sources.push({
       list,
       remaining: 10,
+      cursor: 0,
+    });
+  }
+  for (const list of customMinSorted) {
+    sources.push({
+      list,
+      remaining: 12,
+      cursor: 0,
+    });
+  }
+  for (const list of customMaxSorted) {
+    sources.push({
+      list,
+      remaining: 8,
       cursor: 0,
     });
   }
@@ -526,7 +802,7 @@ function computePerNodeBranchCap(params: {
   const denominator = Math.max(1, beamSize * Math.max(1, remainingStages));
   const budgetPerNode = Math.floor(remainingBudget / denominator);
   // Keep branching bounded so the search can reach complete builds under budget.
-  const cap = Math.max(8, Math.min(64, budgetPerNode));
+  const cap = Math.max(8, Math.min(96, budgetPerNode));
   return Math.min(poolSize, cap);
 }
 
@@ -545,12 +821,21 @@ function finalizeBeamCandidates(params: {
   beam: BeamNode[];
   catalog: CatalogSnapshot;
   constraints: AutoBuildConstraints;
+  skillpointAssist?: [number, number, number, number, number] | null;
   signal?: AbortSignal;
 }): {
   candidates: AutoBuildCandidate[];
-  rejectStats: { majorIds: number; spInvalid: number; duplicate: number; hardConstraints: number };
+  rejectStats: {
+    majorIds: number;
+    spInvalid: number;
+    duplicate: number;
+    hardConstraints: number;
+    hardAttackSpeed: number;
+    hardThresholds: number;
+    hardItem: number;
+  };
 } {
-  const { beam, catalog, constraints, signal } = params;
+  const { beam, catalog, constraints, skillpointAssist, signal } = params;
   const candidates: AutoBuildCandidate[] = [];
   const seenCandidateKeys = new Set<string>();
   const rejectStats = {
@@ -558,6 +843,9 @@ function finalizeBeamCandidates(params: {
     spInvalid: 0,
     duplicate: 0,
     hardConstraints: 0,
+    hardAttackSpeed: 0,
+    hardThresholds: 0,
+    hardItem: 0,
   };
 
   for (const node of beam) {
@@ -573,13 +861,18 @@ function finalizeBeamCandidates(params: {
         characterClass: constraints.characterClass,
       },
       catalog,
+      skillpointAssist ? { skillpointFeasibility: { extraBaseSkillPoints: skillpointAssist } } : undefined,
     );
     if (!summary.derived.skillpointFeasible) {
       rejectStats.spInvalid++;
       continue;
     }
-    if (!slotsSatisfyFinalHardConstraints(node.slots, catalog, constraints, summary)) {
+    const hardCheck = validateFinalHardConstraints(node.slots, catalog, constraints, summary);
+    if (!hardCheck.ok) {
       rejectStats.hardConstraints++;
+      if (hardCheck.reason === 'attackSpeed') rejectStats.hardAttackSpeed++;
+      else if (hardCheck.reason === 'thresholds') rejectStats.hardThresholds++;
+      else rejectStats.hardItem++;
       continue;
     }
     const key = canonicalCandidateKey(node.slots);
@@ -617,11 +910,13 @@ function runFeasibilityBiasedBeamSearch(params: {
   catalog: CatalogSnapshot;
   constraints: AutoBuildConstraints;
   focusStats: SkillStatKey[];
+  attackSpeedCtx?: AttackSpeedReachabilityContext | null;
   onProgress?: (event: AutoBuildProgressEvent) => void;
   signal?: AbortSignal;
 }): { beam: BeamNode[]; processedStates: number; stateBudgetHit: boolean } {
-  const { slotOrder, candidatePools, baseSlots, catalog, constraints, focusStats, onProgress, signal } = params;
+  const { slotOrder, candidatePools, baseSlots, catalog, constraints, focusStats, attackSpeedCtx, onProgress, signal } = params;
   const suffixMax = optimisticSuffixMax(slotOrder, candidatePools);
+  const atkTierBounds = attackSpeedCtx ? buildAtkTierSuffixBounds(slotOrder, candidatePools, catalog) : null;
   const overcapNeed = collectOvercapNeeds(baseSlots, catalog, focusStats);
   const supportSuffixMax: number[][] = Array.from({ length: slotOrder.length + 1 }, () => focusStats.map(() => 0));
   for (let i = slotOrder.length - 1; i >= 0; i--) {
@@ -645,6 +940,7 @@ function runFeasibilityBiasedBeamSearch(params: {
     optimisticBound: suffixMax[0],
     feasibilityAssigned: 0,
     focusSupport: focusStats.map(() => 0),
+    atkTierAssigned: 0,
   }];
 
   let processedStates = 0;
@@ -678,10 +974,24 @@ function runFeasibilityBiasedBeamSearch(params: {
         const nextSlots = cloneSlots(node.slots);
         nextSlots[slot] = entry.id;
         const item = catalog.itemsById.get(entry.id);
+        const nextAtkTierAssigned = (node.atkTierAssigned ?? 0) + (item ? normalizedAtkTier(item) : 0);
         const nextFocusSupport = addNumberVectors(
           node.focusSupport ?? focusStats.map(() => 0),
           item ? focusBonusVectorForItem(item, focusStats) : focusStats.map(() => 0),
         );
+
+        if (
+          attackSpeedCtx &&
+          atkTierBounds &&
+          !canStillReachAllowedAttackSpeed(
+            attackSpeedCtx,
+            nextAtkTierAssigned,
+            atkTierBounds.minSuffix[orderIndex + 1],
+            atkTierBounds.maxSuffix[orderIndex + 1],
+          )
+        ) {
+          continue;
+        }
 
         if (focusStats.length > 0 && !canStillMeetOvercapNeed(nextFocusSupport, supportSuffixMax[orderIndex + 1], overcapNeed)) {
           continue;
@@ -696,6 +1006,7 @@ function runFeasibilityBiasedBeamSearch(params: {
           optimisticBound: nextRoughScore + suffixMax[orderIndex + 1],
           feasibilityAssigned: partialFeasibility.feasible ? partialFeasibility.assignedTotal : Infinity,
           focusSupport: nextFocusSupport,
+          atkTierAssigned: nextAtkTierAssigned,
         });
       }
       if (stateBudgetHit) break;
@@ -715,7 +1026,14 @@ function runFeasibilityBiasedBeamSearch(params: {
       return { beam: [], processedStates, stateBudgetHit };
     }
 
+    const remainingMinAtkTier = atkTierBounds ? atkTierBounds.minSuffix[orderIndex + 1] : 0;
+    const remainingMaxAtkTier = atkTierBounds ? atkTierBounds.maxSuffix[orderIndex + 1] : 0;
     nextBeam.sort((a, b) => {
+      if (attackSpeedCtx) {
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        if (ab !== bb) return bb - ab;
+      }
       if (focusStats.length > 0) {
         const ad = supportDeficit(a.focusSupport ?? [], overcapNeed);
         const bd = supportDeficit(b.focusSupport ?? [], overcapNeed);
@@ -736,7 +1054,7 @@ function runFeasibilityBiasedBeamSearch(params: {
       beamSize: beam.length,
       totalSlots: slotOrder.length,
       expandedSlots: orderIndex + 1,
-      detail: `feasibility-first | branchCap=${perNodeBranchCap}${focusStats.length > 0 ? ` | focus=${focusStats.join('/')}` : ''}`,
+      detail: `feasibility-first | branchCap=${perNodeBranchCap}${focusStats.length > 0 ? ` | focus=${focusStats.join('/')}` : ''}${attackSpeedCtx ? ` | atkSpeed=${constraints.weaponAttackSpeeds.join('/')}` : ''}`,
     });
   }
 
@@ -759,6 +1077,9 @@ function enumerateExactCandidates(params: {
   let rejectedSpInvalid = 0;
   let rejectedDuplicate = 0;
   let rejectedHardConstraints = 0;
+  let rejectedHardAttackSpeed = 0;
+  let rejectedHardThresholds = 0;
+  let rejectedHardItem = 0;
 
   const recurse = (orderIndex: number, slots: WorkbenchSnapshot['slots']) => {
     if (signal?.aborted) throw new DOMException('Auto build cancelled', 'AbortError');
@@ -776,8 +1097,12 @@ function enumerateExactCandidates(params: {
         rejectedSpInvalid++;
         return;
       }
-      if (!slotsSatisfyFinalHardConstraints(slots, catalog, constraints, summary)) {
+      const hardCheck = validateFinalHardConstraints(slots, catalog, constraints, summary);
+      if (!hardCheck.ok) {
         rejectedHardConstraints++;
+        if (hardCheck.reason === 'attackSpeed') rejectedHardAttackSpeed++;
+        else if (hardCheck.reason === 'thresholds') rejectedHardThresholds++;
+        else rejectedHardItem++;
         return;
       }
       const key = canonicalCandidateKey(slots);
@@ -820,8 +1145,8 @@ function enumerateExactCandidates(params: {
     expandedSlots: slotOrder.length,
     detail:
       candidates.length > 0
-        ? `Exact search produced ${candidates.length} valid builds. Rejected duplicates=${rejectedDuplicate}, SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, hard=${rejectedHardConstraints}.`
-        : `Exact search produced 0 valid builds. Rejected SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, duplicates=${rejectedDuplicate}, hard=${rejectedHardConstraints}.`,
+        ? `Exact search produced ${candidates.length} valid builds. Rejected duplicates=${rejectedDuplicate}, SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, hard=${rejectedHardConstraints} (speed=${rejectedHardAttackSpeed}, thresholds=${rejectedHardThresholds}, item=${rejectedHardItem}).`
+        : `Exact search produced 0 valid builds. Rejected SP-invalid=${rejectedSpInvalid}, majorID=${rejectedMajorIds}, duplicates=${rejectedDuplicate}, hard=${rejectedHardConstraints} (speed=${rejectedHardAttackSpeed}, thresholds=${rejectedHardThresholds}, item=${rejectedHardItem}).`,
   });
   candidates.sort((a, b) => {
     if (a.score !== b.score) return b.score - a.score;
@@ -863,8 +1188,28 @@ export function runAutoBuildBeamSearch(params: {
       buildCandidatePoolForSlot(slot, catalog, constraints, pinnedAllowlistBySlot?.[slot] ?? null, supportFocusStats),
     );
   }
+  const attackSpeedCtx = buildAttackSpeedReachabilityContext(baseSlots, catalog, constraints);
 
   const slotOrder = [...unlockedSlots].sort((a, b) => {
+    if (attackSpeedCtx?.preferredDirection) {
+      const aPool = candidatePools.get(a) ?? [];
+      const bPool = candidatePools.get(b) ?? [];
+      const aPotential = aPool.reduce((best, entry) => {
+        const item = catalog.itemsById.get(entry.id);
+        if (!item) return best;
+        const atkTier = normalizedAtkTier(item);
+        const score = attackSpeedCtx.preferredDirection > 0 ? Math.max(0, atkTier) : Math.max(0, -atkTier);
+        return Math.max(best, score);
+      }, 0);
+      const bPotential = bPool.reduce((best, entry) => {
+        const item = catalog.itemsById.get(entry.id);
+        if (!item) return best;
+        const atkTier = normalizedAtkTier(item);
+        const score = attackSpeedCtx.preferredDirection > 0 ? Math.max(0, atkTier) : Math.max(0, -atkTier);
+        return Math.max(best, score);
+      }, 0);
+      if (aPotential !== bPotential) return bPotential - aPotential;
+    }
     if (supportFocusStats.length > 0) {
       const aSupport = computeSlotFocusSupportPotential(a, candidatePools, catalog, supportFocusStats);
       const bSupport = computeSlotFocusSupportPotential(b, candidatePools, catalog, supportFocusStats);
@@ -922,7 +1267,10 @@ export function runAutoBuildBeamSearch(params: {
     orderIndex: 0,
     roughScore: 0,
     optimisticBound: suffixMax[0],
+    atkTierAssigned: 0,
   }];
+
+  const atkTierBounds = attackSpeedCtx ? buildAtkTierSuffixBounds(slotOrder, candidatePools, catalog) : null;
 
   let processedStates = 0;
   let stateBudgetHit = false;
@@ -956,11 +1304,26 @@ export function runAutoBuildBeamSearch(params: {
         const nextSlots = cloneSlots(node.slots);
         nextSlots[slot] = entry.id;
         const nextRoughScore = node.roughScore + entry.rough;
+        const item = catalog.itemsById.get(entry.id);
+        const nextAtkTierAssigned = (node.atkTierAssigned ?? 0) + (item ? normalizedAtkTier(item) : 0);
+        if (
+          attackSpeedCtx &&
+          atkTierBounds &&
+          !canStillReachAllowedAttackSpeed(
+            attackSpeedCtx,
+            nextAtkTierAssigned,
+            atkTierBounds.minSuffix[orderIndex + 1],
+            atkTierBounds.maxSuffix[orderIndex + 1],
+          )
+        ) {
+          continue;
+        }
         nextBeam.push({
           slots: nextSlots,
           orderIndex: orderIndex + 1,
           roughScore: nextRoughScore,
           optimisticBound: nextRoughScore + suffixMax[orderIndex + 1],
+          atkTierAssigned: nextAtkTierAssigned,
         });
       }
       if (stateBudgetHit) break;
@@ -980,7 +1343,14 @@ export function runAutoBuildBeamSearch(params: {
       return [];
     }
 
+    const remainingMinAtkTier = atkTierBounds ? atkTierBounds.minSuffix[orderIndex + 1] : 0;
+    const remainingMaxAtkTier = atkTierBounds ? atkTierBounds.maxSuffix[orderIndex + 1] : 0;
     nextBeam.sort((a, b) => {
+      if (attackSpeedCtx) {
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        if (ab !== bb) return bb - ab;
+      }
       if (a.optimisticBound !== b.optimisticBound) return b.optimisticBound - a.optimisticBound;
       return b.roughScore - a.roughScore;
     });
@@ -992,10 +1362,11 @@ export function runAutoBuildBeamSearch(params: {
       beamSize: beam.length,
       totalSlots: slotOrder.length,
       expandedSlots: orderIndex + 1,
-      detail: `branchCap=${perNodeBranchCap}`,
+      detail: `branchCap=${perNodeBranchCap}${attackSpeedCtx?.preferredDirection ? ` | atkSpeedTarget=${constraints.weaponAttackSpeeds.join('/')}` : ''}`,
     });
   }
 
+  let finalizationBeam = beam;
   let { candidates, rejectStats } = finalizeBeamCandidates({
     beam,
     catalog,
@@ -1011,17 +1382,31 @@ export function runAutoBuildBeamSearch(params: {
     detail:
       candidates.length > 0
         ? `Final eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
-        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints}.`,
+        : `Final eval found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
   });
 
-  if (candidates.length === 0 && rejectStats.spInvalid > 0 && slotOrder.length > 0) {
+  if (
+    candidates.length === 0 &&
+    slotOrder.length > 0 &&
+    (
+      rejectStats.spInvalid > 0 ||
+      (constraints.weaponAttackSpeeds.length > 0 && rejectStats.hardAttackSpeed > 0) ||
+      rejectStats.hardThresholds > 0
+    )
+  ) {
+    const thresholdRescue = rejectStats.hardThresholds > 0;
     onProgress?.({
       phase: 'diagnostics',
       processedStates,
       beamSize: beam.length,
       totalSlots: slotOrder.length,
       expandedSlots: slotOrder.length,
-      detail: 'Retrying with feasibility-first beam search (support-aware rescue for high-skill requirements).',
+      detail:
+        thresholdRescue && constraints.target.customNumericRanges?.length
+          ? 'Retrying with threshold-aware rescue (advanced ID constraints + support-aware feasibility search).'
+          : rejectStats.hardAttackSpeed > 0
+          ? 'Retrying with feasibility-first beam search (support-aware rescue + attack-speed target reachability).'
+          : 'Retrying with feasibility-first beam search (support-aware rescue for high-skill requirements).',
     });
 
     const fallback = runFeasibilityBiasedBeamSearch({
@@ -1031,15 +1416,27 @@ export function runAutoBuildBeamSearch(params: {
       catalog,
       constraints: {
         ...constraints,
-        maxStates: Math.max(constraints.maxStates, Math.min(8_000_000, constraints.maxStates * 2)),
-        beamWidth: Math.max(constraints.beamWidth, 1800),
+        maxStates: Math.max(
+          constraints.maxStates,
+          thresholdRescue
+            ? Math.min(18_000_000, constraints.maxStates * 5)
+            : constraints.weaponAttackSpeeds.length > 0
+            ? Math.min(16_000_000, constraints.maxStates * 4)
+            : Math.min(8_000_000, constraints.maxStates * 2),
+        ),
+        beamWidth: Math.max(
+          constraints.beamWidth,
+          thresholdRescue ? 3600 : constraints.weaponAttackSpeeds.length > 0 ? 3200 : 1800,
+        ),
       },
       focusStats: supportFocusStats,
+      attackSpeedCtx,
       onProgress,
       signal,
     });
 
     if (fallback.beam.length > 0) {
+      finalizationBeam = fallback.beam;
       const finalized = finalizeBeamCandidates({
         beam: fallback.beam,
         catalog,
@@ -1057,7 +1454,53 @@ export function runAutoBuildBeamSearch(params: {
         detail:
           candidates.length > 0
             ? `Feasibility-first eval: ${candidates.length} valid builds. Rejected duplicates=${rejectStats.duplicate}, SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, hard=${rejectStats.hardConstraints}.`
-            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints}.`,
+            : `Feasibility-first eval still found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
+      });
+    }
+  }
+
+  if (candidates.length === 0 && rejectStats.spInvalid > 0 && rejectStats.hardConstraints === 0) {
+    let recovered = false;
+    for (const assist of TOME_ASSIST_FALLBACKS) {
+      onProgress?.({
+        phase: 'diagnostics',
+        processedStates,
+        beamSize: finalizationBeam.length,
+        totalSlots: slotOrder.length,
+        expandedSlots: slotOrder.length,
+        detail: `Retrying final evaluation with tome-assisted SP feasibility (+${assist[0]} per stat).`,
+      });
+      const tomeAssistFinal = finalizeBeamCandidates({
+        beam: finalizationBeam,
+        catalog,
+        constraints,
+        skillpointAssist: assist,
+        signal,
+      });
+      if (tomeAssistFinal.candidates.length > 0) {
+        candidates = tomeAssistFinal.candidates;
+        rejectStats = tomeAssistFinal.rejectStats;
+        recovered = true;
+        onProgress?.({
+          phase: 'diagnostics',
+          processedStates,
+          beamSize: finalizationBeam.length,
+          totalSlots: slotOrder.length,
+          expandedSlots: slotOrder.length,
+          detail: `Tome-assisted final eval recovered ${candidates.length} valid builds (+${assist[0]} per stat feasibility assist).`,
+        });
+        break;
+      }
+      rejectStats = tomeAssistFinal.rejectStats;
+    }
+    if (!recovered) {
+      onProgress?.({
+        phase: 'diagnostics',
+        processedStates,
+        beamSize: finalizationBeam.length,
+        totalSlots: slotOrder.length,
+        expandedSlots: slotOrder.length,
+        detail: `Tome-assisted final eval still found 0 valid builds after +${TOME_ASSIST_FALLBACKS[TOME_ASSIST_FALLBACKS.length - 1][0]} per stat assist. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).`,
       });
     }
   }

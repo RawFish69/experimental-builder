@@ -188,7 +188,7 @@ export function ItemCard(props: {
         <ItemTypeIcon item={props.item} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1">
-            <div className={cn('truncate font-semibold', props.dense ? 'text-xs' : 'text-sm', tierColor(props.item.tier))}>{props.item.displayName}</div>
+            <div className={cn('truncate text-sm font-semibold leading-tight', tierColor(props.item.tier))}>{props.item.displayName}</div>
             {props.badge ? <span className="wb-chip">{props.badge}</span> : null}
             {props.locked ? (
               <span className="wb-chip inline-flex items-center gap-1">
@@ -196,7 +196,7 @@ export function ItemCard(props: {
               </span>
             ) : null}
           </div>
-          <div className={cn('mt-1 flex flex-wrap gap-y-1 text-[var(--wb-muted)]', props.dense ? 'gap-x-2 text-[11px]' : 'gap-x-3 text-xs')}>
+          <div className={cn('mt-1 flex flex-wrap gap-y-1 text-[var(--wb-muted)]', props.dense ? 'gap-x-2 text-xs' : 'gap-x-3 text-xs')}>
             <span>{props.item.type}</span>
             <span>Lv {props.item.level}</span>
             {!props.dense ? <span>{props.item.tier}</span> : null}
@@ -205,7 +205,7 @@ export function ItemCard(props: {
             {props.dense && props.item.majorIds.length > 0 ? <span>M{props.item.majorIds.length}</span> : null}
           </div>
           {props.showDetails ? (
-            <div className={cn('mt-2 space-y-1', props.dense ? 'text-[10px]' : 'text-xs')}>
+            <div className={cn('mt-2 space-y-1', props.dense ? 'text-[11px]' : 'text-xs')}>
               {(reqSummary || bonusSummary) && (
                 <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 text-[var(--wb-muted)]">
                   {reqSummary ? <span className="mr-2">Req {reqSummary}</span> : null}
@@ -215,14 +215,14 @@ export function ItemCard(props: {
               {chips.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {chips.map((chip) => (
-                    <span key={chip} className="wb-chip text-[10px]">
+                    <span key={chip} className="wb-chip text-[11px]">
                       {chip}
                     </span>
                   ))}
                 </div>
               ) : null}
               {damageSummary ? (
-                <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 font-mono text-[10px] leading-relaxed text-[var(--wb-muted)]">
+                <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 font-mono text-[11px] leading-relaxed text-[var(--wb-muted)]">
                   {damageSummary}
                 </div>
               ) : null}

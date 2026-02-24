@@ -49,6 +49,11 @@ type SkillVec = [number, number, number, number, number];
 interface EquipFeasibilityResult {
   feasible: boolean;
   assignedTotal: number;
+  assignedByStat: SkillVec | null;
+}
+
+interface SkillpointFeasibilityOptions {
+  extraBaseSkillPoints?: SkillVec;
 }
 
 // Ported from legacy builder build_utils.js / builder_graph.js to keep Workbench EHP
@@ -155,10 +160,11 @@ function pushParetoState(frontier: ExactFeasibilityState[], candidate: ExactFeas
   frontier.push(candidate);
 }
 
-function estimateEquipFeasibility(items: NormalizedItem[], level: number): EquipFeasibilityResult {
-  if (items.length === 0) return { feasible: true, assignedTotal: 0 };
+function estimateEquipFeasibility(items: NormalizedItem[], level: number, options: SkillpointFeasibilityOptions = {}): EquipFeasibilityResult {
+  if (items.length === 0) return { feasible: true, assignedTotal: 0, assignedByStat: [0, 0, 0, 0, 0] };
 
   const available = levelToAvailableSkillPoints(level);
+  const extraBase = options.extraBaseSkillPoints ?? [0, 0, 0, 0, 0];
   const n = items.length;
   const reqs = items.map(itemReqVector);
   const bonuses = items.map(itemBonusVector);
@@ -185,7 +191,7 @@ function estimateEquipFeasibility(items: NormalizedItem[], level: number): Equip
         const nextAssigned: SkillVec = [...state.assigned] as SkillVec;
         let valid = true;
         for (let j = 0; j < 5; j++) {
-          const currentTotal = state.assigned[j] + bonusSum[j];
+          const currentTotal = state.assigned[j] + bonusSum[j] + (extraBase[j] ?? 0);
           const required = reqs[i][j];
           if (required > currentTotal) {
             nextAssigned[j] += required - currentTotal;
@@ -211,20 +217,27 @@ function estimateEquipFeasibility(items: NormalizedItem[], level: number): Equip
   }
 
   const finals = frontiers[stateCount - 1];
-  if (!finals || finals.length === 0) return { feasible: false, assignedTotal: Infinity };
+  if (!finals || finals.length === 0) return { feasible: false, assignedTotal: Infinity, assignedByStat: null };
   let bestAssignedTotal = Infinity;
+  let bestAssigned: SkillVec | null = null;
   for (const state of finals) {
     if (state.assignedTotal < bestAssignedTotal) {
       bestAssignedTotal = state.assignedTotal;
+      bestAssigned = [...state.assigned] as SkillVec;
     }
   }
-  return { feasible: Number.isFinite(bestAssignedTotal), assignedTotal: bestAssignedTotal };
+  return {
+    feasible: Number.isFinite(bestAssignedTotal),
+    assignedTotal: bestAssignedTotal,
+    assignedByStat: Number.isFinite(bestAssignedTotal) ? bestAssigned : null,
+  };
 }
 
 export function evaluateBuildSkillpointFeasibility(
   slots: BuildEvaluationInput['slots'],
   catalog: CatalogSnapshot,
   level: number,
+  options: SkillpointFeasibilityOptions = {},
 ): EquipFeasibilityResult {
   const items: NormalizedItem[] = [];
   for (const slot of ITEM_SLOTS) {
@@ -233,7 +246,11 @@ export function evaluateBuildSkillpointFeasibility(
     const item = catalog.itemsById.get(itemId);
     if (item) items.push(item);
   }
-  return estimateEquipFeasibility(items, level);
+  return estimateEquipFeasibility(items, level, options);
+}
+
+export interface BuildEvaluationOptions {
+  skillpointFeasibility?: SkillpointFeasibilityOptions;
 }
 
 export function getEquippedItems(input: BuildEvaluationInput, catalog: CatalogSnapshot): Partial<Record<(typeof ITEM_SLOTS)[number], NormalizedItem>> {
@@ -247,7 +264,7 @@ export function getEquippedItems(input: BuildEvaluationInput, catalog: CatalogSn
   return equipped;
 }
 
-export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnapshot): BuildSummary {
+export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnapshot, options: BuildEvaluationOptions = {}): BuildSummary {
   const equipped = getEquippedItems(input, catalog);
   const summary: BuildSummary = structuredClone(EMPTY_SUMMARY);
   const warnings = summary.warnings.messages;
@@ -339,7 +356,12 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     summary.aggregated.skillPoints.def +
     summary.aggregated.skillPoints.agi;
 
-  const equipFeasibility = evaluateBuildSkillpointFeasibility(input.slots, catalog, input.level);
+  const equipFeasibility = evaluateBuildSkillpointFeasibility(
+    input.slots,
+    catalog,
+    input.level,
+    options.skillpointFeasibility,
+  );
 
   const dpsProxy =
     summary.aggregated.offense.baseDps +

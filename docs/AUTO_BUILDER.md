@@ -1,6 +1,6 @@
-# Auto Builder Notes
+# Build Solver Notes
 
-This document is for tuning and debugging the Workbench Auto Builder.
+This document is for tuning and debugging the Workbench Build Solver.
 
 ## Where the code lives
 

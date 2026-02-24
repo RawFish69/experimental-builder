@@ -1,6 +1,5 @@
-# experimental builder
-
-This repository is an experimental rework of the Wynnbuilder web app
+# Build Solver
+A web app for building and optimizing Wynncraft character loadouts using the Workbench + Build Solver application.
 
 ## Layout 
 
@@ -10,7 +9,7 @@ This repository is an experimental rework of the Wynnbuilder web app
 - `crafter/`, `custom/`, `map/`, `wynnfo/`, etc. - legacy static pages/tools
 - `js/`, `css/`, `media/`, `thirdparty/` - shared legacy web assets and scripts
 
-### New Workbench app
+### New Workbench + Build Solver app
 - `frontend/` - source code (React + TypeScript + Vite)
 - `workbench/` - built static output for `/workbench/`
 
@@ -35,6 +34,8 @@ npm.cmd run dev
 
 Open:
 - `http://localhost:5173/workbench/`
+
+In the Workbench UI, the old "Auto Builder / Optimizer" flow is now called `Build Solver`.
 
 Build:
 

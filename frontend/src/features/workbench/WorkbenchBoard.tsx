@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Lock, Trash2, Undo2 } from 'lucide-react';
+import { Copy, Link2, Lock, Trash2, Undo2, Upload } from 'lucide-react';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { categoryLabel, slotLabel, slotToCategory } from '@/domain/items/types';
 import type { WorkbenchStore } from '@/domain/build/workbench-state';
@@ -141,6 +141,9 @@ export function WorkbenchBoard(props: {
   catalog: CatalogSnapshot;
   store: WorkbenchStore;
   onHoverItem?: (itemId: number | null, slot: ItemSlot | null) => void;
+  onShareWorkbench?: () => void;
+  onExportWorkbench?: () => void;
+  onImportWorkbench?: () => void;
 }) {
   const [showItemDetails, setShowItemDetails] = useState(false);
   const slotGroups = useMemo(
@@ -197,7 +200,7 @@ export function WorkbenchBoard(props: {
         </>
       }
     >
-      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr] gap-2 p-2.5">
+      <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr_auto] gap-2 p-2.5">
         <div className="grid gap-1.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.05fr)]">
           {slotGroups.map((group, idx) => (
             <div key={idx} className="grid gap-1.5">
@@ -272,6 +275,23 @@ export function WorkbenchBoard(props: {
             ))}
           </div>
         </ScrollArea>
+
+        <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <Button variant="ghost" className="justify-start" onClick={props.onShareWorkbench}>
+              <Link2 size={14} className="mr-2" />
+              Share
+            </Button>
+            <Button variant="ghost" className="justify-start" onClick={props.onExportWorkbench}>
+              <Copy size={14} className="mr-2" />
+              Export
+            </Button>
+            <Button variant="ghost" className="justify-start" onClick={props.onImportWorkbench}>
+              <Upload size={14} className="mr-2" />
+              Import
+            </Button>
+          </div>
+        </div>
       </div>
     </Panel>
   );

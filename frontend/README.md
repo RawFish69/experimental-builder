@@ -2,6 +2,8 @@
 
 React + TypeScript + Vite app for the `/workbench/` route.
 
+The Workbench includes the build generation feature now named `Build Solver`.
+
 ## Quick start
 
 ```powershell

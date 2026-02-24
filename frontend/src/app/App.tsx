@@ -34,6 +34,7 @@ import { AbilityTreeModal } from '@/features/abilitytree/AbilityTreeModal';
 import { abilityTreeCatalogService } from '@/domain/ability-tree/catalog-service';
 import { evaluateAbilityTree, getClassTree } from '@/domain/ability-tree/logic';
 import type { AbilityTreeDataset, AbilityTreeSelectionsByClass } from '@/domain/ability-tree/types';
+import { buildWorkbenchSpellPreview } from '@/domain/ability-tree/spell-preview';
 import { Button } from '@/components/ui';
 
 function copyText(value: string): Promise<void> {
@@ -336,6 +337,16 @@ export function App() {
     );
   }, [catalog, summary, snapshot]);
 
+  const spellPreview = useMemo(() => {
+    if (!catalog) return null;
+    return buildWorkbenchSpellPreview({
+      catalog,
+      snapshot,
+      abilityTreeTree,
+      abilityTreeEvaluation,
+    });
+  }, [catalog, snapshot, abilityTreeTree, abilityTreeEvaluation]);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -596,14 +607,14 @@ export function App() {
                   setAutoBuilderOpen(true);
                 }}
               >
-                Optimizer
+                Build Solver
               </Button>
             </div>
           </div>
           {statusMessage ? <div className="mt-2 text-xs text-emerald-200">{statusMessage}</div> : null}
         </header>
 
-        <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(360px,28vw)_minmax(0,1fr)_360px]">
+        <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px]">
           <SearchPanel
             catalog={catalog}
             state={searchState}
@@ -621,6 +632,9 @@ export function App() {
             catalog={catalog}
             store={store}
             onHoverItem={(itemId, slot) => store.setComparePreview(itemId && slot ? { itemId, slot } : null)}
+            onShareWorkbench={() => void shareWorkbench()}
+            onExportWorkbench={exportWorkbench}
+            onImportWorkbench={() => void importWorkbench()}
           />
 
           <BuildSummaryPanel
@@ -629,6 +643,7 @@ export function App() {
             summary={summary}
             compareSummary={compareSummary}
             compareSlot={snapshot.comparePreview.slot}
+            spellPreview={spellPreview}
             abilityTreeSummary={
               abilityTreeEvaluation && abilityTreeClass
                 ? {
@@ -648,9 +663,6 @@ export function App() {
               onOpenAbilityTree: () => {
                 openAbilityTree();
               },
-              onExportWorkbench: exportWorkbench,
-              onImportWorkbench: () => void importWorkbench(),
-              onShareWorkbench: () => void shareWorkbench(),
               onCopyLegacyLink: () => void copyLegacyLink(),
               onOpenLegacyBuilder: openLegacyBuilder,
             }}
@@ -666,7 +678,7 @@ export function App() {
         onLoadCandidate={(candidate) => {
           store.loadCandidate(candidate.slots);
           setAutoBuilderOpen(false);
-          setStatusMessage('Loaded autobuilder candidate into Workbench.');
+          setStatusMessage('Loaded Build Solver candidate into Workbench.');
         }}
       />
       <AbilityTreeModal

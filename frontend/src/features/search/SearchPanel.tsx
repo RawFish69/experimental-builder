@@ -132,7 +132,7 @@ export function SearchPanel(props: {
       headerRight={
         <Button className="px-2 py-1 text-xs" onClick={props.onOpenAutoBuilder}>
           <Sparkles size={12} className="mr-1 inline" />
-          Auto Builder
+          Build Solver
         </Button>
       }
     >

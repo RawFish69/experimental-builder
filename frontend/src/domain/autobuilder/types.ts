@@ -22,6 +22,11 @@ export interface AutoBuilderThresholds {
   minSpeed?: number;
   minSkillPointTotal?: number;
   maxReqTotal?: number;
+  customNumericRanges?: Array<{
+    key: string;
+    min?: number;
+    max?: number;
+  }>;
 }
 
 export interface AutoBuildConstraints {

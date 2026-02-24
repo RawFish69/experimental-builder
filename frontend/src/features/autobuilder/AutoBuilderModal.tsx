@@ -36,6 +36,13 @@ function toggleString(list: string[], value: string): string[] {
 
 const WEAPON_ATTACK_SPEED_OPTIONS = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
 type OptimizationPreset = 'balanced' | 'damage' | 'tank' | 'spell' | 'melee' | 'speed' | 'sustain';
+type SolverStrategy = 'auto' | 'fast' | 'constraint' | 'exhaustive';
+type CustomIdThresholdRow = {
+  id: number;
+  key: string;
+  min: number | null;
+  max: number | null;
+};
 
 const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
   balanced: 'Balanced',
@@ -46,6 +53,44 @@ const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
   speed: 'Mobility',
   sustain: 'Sustain',
 };
+
+const COMPUTED_NUMERIC_KEYS = new Set(['reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore']);
+const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
+  auto: 'Auto (Recommended)',
+  fast: 'Fast',
+  constraint: 'Constraint-first',
+  exhaustive: 'Exhaustive-ish',
+};
+
+function formatNumericIdLabel(key: string): string {
+  const labels: Record<string, string> = {
+    hpBonus: 'HP Bonus',
+    hprRaw: 'HPR Raw',
+    hprPct: 'HPR %',
+    mr: 'Mana Regen',
+    ms: 'Mana Steal',
+    ls: 'Life Steal',
+    sdPct: 'Spell Damage %',
+    sdRaw: 'Spell Damage Raw',
+    mdPct: 'Melee Damage %',
+    mdRaw: 'Melee Damage Raw',
+    poison: 'Poison',
+    spd: 'Walk Speed',
+    atkTier: 'Attack Speed Bonus',
+    averageDps: 'Average DPS',
+    str: 'STR Bonus',
+    dex: 'DEX Bonus',
+    int: 'INT Bonus',
+    def: 'DEF Bonus',
+    agi: 'AGI Bonus',
+    strReq: 'STR Req',
+    dexReq: 'DEX Req',
+    intReq: 'INT Req',
+    defReq: 'DEF Req',
+    agiReq: 'AGI Req',
+  };
+  return labels[key] ?? key;
+}
 
 function presetWeightDelta(preset: OptimizationPreset): AutoBuildConstraints['weights'] {
   const base = { ...DEFAULT_AUTO_BUILD_CONSTRAINTS.weights };
@@ -105,6 +150,7 @@ export function AutoBuilderModal(props: {
   const [minMs, setMinMs] = useState<number | null>(null);
   const [minSpeed, setMinSpeed] = useState<number | null>(null);
   const [maxReqTotal, setMaxReqTotal] = useState<number | null>(null);
+  const [customIdThresholds, setCustomIdThresholds] = useState<CustomIdThresholdRow[]>([]);
   const [primaryPreset, setPrimaryPreset] = useState<OptimizationPreset>('balanced');
   const [secondaryPreset, setSecondaryPreset] = useState<OptimizationPreset | null>(null);
   const [builderCharacterClass, setBuilderCharacterClass] = useState<AutoBuildConstraints['characterClass']>(props.snapshot.characterClass);
@@ -118,6 +164,7 @@ export function AutoBuilderModal(props: {
   const [beamWidth, setBeamWidth] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.beamWidth);
   const [topKPerSlot, setTopKPerSlot] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.topKPerSlot);
   const [topN, setTopN] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.topN);
+  const [solverStrategy, setSolverStrategy] = useState<SolverStrategy>('auto');
 
   const [results, setResults] = useState<AutoBuildCandidate[]>([]);
   const [progress, setProgress] = useState<string>('');
@@ -130,6 +177,7 @@ export function AutoBuilderModal(props: {
   const [lastDiagnostics, setLastDiagnostics] = useState<string | null>(null);
   const diagnosticsRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const customIdThresholdSeqRef = useRef(1);
 
   const lockedSlots = useMemo(() => {
     const locked: AutoBuildConstraints['lockedSlots'] = {};
@@ -141,6 +189,12 @@ export function AutoBuilderModal(props: {
 
   const tierOptions = props.catalog?.facetsMeta.tiers ?? [];
   const majorIdQuickPicks = (props.catalog?.facetsMeta.majorIds ?? []).slice(0, 24);
+  const numericIdOptions = useMemo(() => {
+    const keys = Object.keys(props.catalog?.facetsMeta.numericRanges ?? {});
+    return keys
+      .filter((key) => !COMPUTED_NUMERIC_KEYS.has(key))
+      .sort((a, b) => formatNumericIdLabel(a).localeCompare(formatNumericIdLabel(b)));
+  }, [props.catalog]);
 
   useEffect(() => {
     if (!props.open) return;
@@ -148,46 +202,111 @@ export function AutoBuilderModal(props: {
     setBuilderLevel(props.snapshot.level);
   }, [props.open, props.snapshot.characterClass, props.snapshot.level]);
 
+  const addCustomIdThresholdRow = () => {
+    setCustomIdThresholds((prev) => [
+      ...prev,
+      {
+        id: customIdThresholdSeqRef.current++,
+        key: numericIdOptions[0] ?? '',
+        min: null,
+        max: null,
+      },
+    ]);
+  };
+
+  const updateCustomIdThresholdRow = (
+    rowId: number,
+    patch: Partial<Pick<CustomIdThresholdRow, 'key' | 'min' | 'max'>>,
+  ) => {
+    setCustomIdThresholds((prev) => prev.map((row) => (row.id === rowId ? { ...row, ...patch } : row)));
+  };
+
+  const removeCustomIdThresholdRow = (rowId: number) => {
+    setCustomIdThresholds((prev) => prev.filter((row) => row.id !== rowId));
+  };
+
   const runWithAttemptPlan = async (
     catalog: CatalogSnapshot,
     baseConstraints: AutoBuildConstraints,
     baseWorkbench: WorkbenchSnapshot,
     abortSignal: AbortSignal,
   ): Promise<AutoBuildCandidate[]> => {
-    const attempts = [
-      {
+    type Attempt = {
+      label: string;
+      topKPerSlot: number;
+      beamWidth: number;
+      maxStates: number;
+      rescueWeights: boolean;
+      useExhaustiveSmallPool?: boolean;
+      exhaustiveStateLimit?: number;
+    };
+    const attempts: Attempt[] = (() => {
+      const fast: Attempt = {
         label: 'Fast pass',
         topKPerSlot: baseConstraints.topKPerSlot,
         beamWidth: baseConstraints.beamWidth,
         maxStates: baseConstraints.maxStates,
         rescueWeights: false,
-      },
-      ...(deepFallbackEnabled
-        ? [
-            {
-              label: 'Deep pass',
-              topKPerSlot: Math.max(baseConstraints.topKPerSlot, 140),
-              beamWidth: Math.max(baseConstraints.beamWidth, 700),
-              maxStates: Math.max(baseConstraints.maxStates, 900000),
-              rescueWeights: false,
-            },
-            {
-              label: 'Bruteforce-ish pass',
-              topKPerSlot: Math.max(baseConstraints.topKPerSlot, 220),
-              beamWidth: Math.max(baseConstraints.beamWidth, 1200),
-              maxStates: Math.max(baseConstraints.maxStates, 4000000),
-              rescueWeights: false,
-            },
-            {
-              label: 'Feasibility rescue',
-              topKPerSlot: Math.max(baseConstraints.topKPerSlot, 260),
-              beamWidth: Math.max(baseConstraints.beamWidth, 1400),
-              maxStates: Math.max(baseConstraints.maxStates, 4500000),
-              rescueWeights: true,
-            },
-          ]
-        : []),
-    ];
+      };
+      const deep: Attempt = {
+        label: 'Deep pass',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 140),
+        beamWidth: Math.max(baseConstraints.beamWidth, 700),
+        maxStates: Math.max(baseConstraints.maxStates, 900000),
+        rescueWeights: false,
+      };
+      const bruteish: Attempt = {
+        label: 'Bruteforce-ish pass',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 220),
+        beamWidth: Math.max(baseConstraints.beamWidth, 1200),
+        maxStates: Math.max(baseConstraints.maxStates, 4000000),
+        rescueWeights: false,
+      };
+      const feasibilityRescue: Attempt = {
+        label: 'Feasibility rescue',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 260),
+        beamWidth: Math.max(baseConstraints.beamWidth, 1400),
+        maxStates: Math.max(baseConstraints.maxStates, 4500000),
+        rescueWeights: true,
+      };
+      const constraintPass: Attempt = {
+        label: 'Constraint-first pass',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 180),
+        beamWidth: Math.max(baseConstraints.beamWidth, 1200),
+        maxStates: Math.max(baseConstraints.maxStates, 2200000),
+        rescueWeights: true,
+      };
+      const constraintDeep: Attempt = {
+        label: 'Constraint rescue deep',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 280),
+        beamWidth: Math.max(baseConstraints.beamWidth, 2200),
+        maxStates: Math.max(baseConstraints.maxStates, 9000000),
+        rescueWeights: true,
+        useExhaustiveSmallPool: true,
+        exhaustiveStateLimit: Math.max(baseConstraints.exhaustiveStateLimit, 1200000),
+      };
+      const exhaustive: Attempt = {
+        label: 'Exhaustive-ish pass',
+        topKPerSlot: Math.max(baseConstraints.topKPerSlot, 300),
+        beamWidth: Math.max(baseConstraints.beamWidth, 2600),
+        maxStates: Math.max(baseConstraints.maxStates, 12000000),
+        rescueWeights: true,
+        useExhaustiveSmallPool: true,
+        exhaustiveStateLimit: Math.max(baseConstraints.exhaustiveStateLimit, 2000000),
+      };
+
+      switch (solverStrategy) {
+        case 'fast':
+          return [fast];
+        case 'constraint':
+          return deepFallbackEnabled ? [constraintPass, constraintDeep, exhaustive] : [constraintPass];
+        case 'exhaustive':
+          return deepFallbackEnabled ? [constraintPass, exhaustive] : [exhaustive];
+        case 'auto':
+        default:
+          return [fast, ...(deepFallbackEnabled ? [deep, bruteish, feasibilityRescue] : [])];
+      }
+    })();
 
     let lastCandidates: AutoBuildCandidate[] = [];
     for (let attemptIndex = 0; attemptIndex < attempts.length; attemptIndex++) {
@@ -198,6 +317,8 @@ export function AutoBuilderModal(props: {
         topKPerSlot: attempt.topKPerSlot,
         beamWidth: attempt.beamWidth,
         maxStates: attempt.maxStates,
+        useExhaustiveSmallPool: attempt.useExhaustiveSmallPool ?? baseConstraints.useExhaustiveSmallPool,
+        exhaustiveStateLimit: attempt.exhaustiveStateLimit ?? baseConstraints.exhaustiveStateLimit,
         weights: attempt.rescueWeights
           ? {
               ...baseConstraints.weights,
@@ -251,14 +372,39 @@ export function AutoBuilderModal(props: {
     const knownMajorIds = new Set(props.catalog.facetsMeta.majorIds.map((value) => value.toUpperCase()));
     const unknownRequiredMajors = requiredMajorIds.filter((value) => !knownMajorIds.has(value));
     const unknownExcludedMajors = excludedMajorIds.filter((value) => !knownMajorIds.has(value));
+    const customNumericRanges = customIdThresholds
+      .map((row) => ({
+        key: row.key.trim(),
+        min: row.min ?? undefined,
+        max: row.max ?? undefined,
+      }))
+      .filter((row) => row.key && (typeof row.min === 'number' || typeof row.max === 'number'));
+    const knownNumericKeys = new Set(Object.keys(props.catalog.facetsMeta.numericRanges));
+    const unknownCustomNumericKeys = customNumericRanges
+      .map((row) => row.key)
+      .filter((key) => !knownNumericKeys.has(key));
+    const invalidCustomNumericRanges = customNumericRanges.filter(
+      (row) => typeof row.min === 'number' && typeof row.max === 'number' && row.min > row.max,
+    );
 
-    if (must.unknown.length > 0 || excluded.unknown.length > 0 || unknownRequiredMajors.length > 0 || unknownExcludedMajors.length > 0) {
+    if (
+      must.unknown.length > 0 ||
+      excluded.unknown.length > 0 ||
+      unknownRequiredMajors.length > 0 ||
+      unknownExcludedMajors.length > 0 ||
+      unknownCustomNumericKeys.length > 0 ||
+      invalidCustomNumericRanges.length > 0
+    ) {
       setError(
         [
           must.unknown.length ? `Unknown must-include items: ${must.unknown.join(', ')}` : '',
           excluded.unknown.length ? `Unknown excluded items: ${excluded.unknown.join(', ')}` : '',
           unknownRequiredMajors.length ? `Unknown required major IDs: ${unknownRequiredMajors.join(', ')}` : '',
           unknownExcludedMajors.length ? `Unknown excluded major IDs: ${unknownExcludedMajors.join(', ')}` : '',
+          unknownCustomNumericKeys.length ? `Unknown advanced ID keys: ${unknownCustomNumericKeys.join(', ')}` : '',
+          invalidCustomNumericRanges.length
+            ? `Invalid advanced ID ranges (min > max): ${invalidCustomNumericRanges.map((row) => row.key).join(', ')}`
+            : '',
         ]
           .filter(Boolean)
           .join(' | '),
@@ -280,6 +426,7 @@ export function AutoBuilderModal(props: {
         minMs: minMs ?? undefined,
         minSpeed: minSpeed ?? undefined,
         maxReqTotal: maxReqTotal ?? undefined,
+        customNumericRanges,
       },
       allowedTiers: [...allowedTiers],
       requiredMajorIds,
@@ -308,15 +455,32 @@ export function AutoBuilderModal(props: {
         const diag = diagnosticsRef.current ?? '';
         const spInvalidMatch = /SP-invalid=(\d+)/i.exec(diag);
         const spInvalidCount = spInvalidMatch ? Number(spInvalidMatch[1]) : 0;
+        const hardSpeedMatch = /hard=.*?\(speed=(\d+)/i.exec(diag);
+        const hardSpeedCount = hardSpeedMatch ? Number(hardSpeedMatch[1]) : 0;
+        const hardThresholdMatch = /hard=.*?\(speed=\d+,\s*thresholds=(\d+)/i.exec(diag);
+        const hardThresholdCount = hardThresholdMatch ? Number(hardThresholdMatch[1]) : 0;
+        const tomeAssistFailed = /Tome-assisted final eval still found 0 valid builds/i.test(diag);
         setError(
           [
             'No valid candidates found.',
             diagnosticsRef.current ? `Diagnostics: ${diagnosticsRef.current}` : '',
-            spInvalidCount > 0
+            tomeAssistFailed
+              ? 'Even after a tome-assisted feasibility retry, the explored candidate builds still failed skill-point/equip-order feasibility.'
+              : spInvalidCount > 0
               ? 'The engine found many full builds, but they failed skill-point/equip-order feasibility. This is not just a UI filter issue.'
+              : hardSpeedCount > 0
+                ? 'The engine found many full builds, but they failed the final attack-speed target. This usually means the search is missing enough +atkTier support for the selected weapon/target combination.'
+              : hardThresholdCount > 0 && customNumericRanges.length > 0
+                ? 'The engine found many full builds, but they failed advanced ID min/max thresholds. This usually means the search is not preserving enough support items for those IDs.'
               : 'This usually means your hard constraints are too strict (pinned-only, major IDs, must-includes, attack-speed, or thresholds), or the selected objective conflicts with them.',
-            spInvalidCount > 0
+            tomeAssistFailed
+              ? 'This usually means the current search still is not surfacing enough requirement-support gear for the chosen weapon/goal combination. Try Exact Search + Deep Fallback, Balanced/Tank objective, and pin a few known requirement/attack-speed support items.'
+              : spInvalidCount > 0
               ? 'Try switching Primary Goal to Balanced or Tank, lowering Min Base DPS/EHP thresholds, and keeping Exact Search + Deep Fallback enabled.'
+              : hardSpeedCount > 0
+                ? 'Tip: keep Exact Search + Deep Fallback enabled, lower thresholds, and try adding/pinning known +Attack Speed Bonus support items for the target speed.'
+              : hardThresholdCount > 0 && customNumericRanges.length > 0
+                ? 'Tip: switch Solver Strategy to Constraint-first or Exhaustive-ish and keep Deep Fallback enabled. For strict advanced IDs, add only the most important thresholds first.'
               : 'Tip: disable pinned-only first, remove major-ID constraints, then try again.',
           ].join(' '),
         );
@@ -345,7 +509,7 @@ export function AutoBuilderModal(props: {
     <Modal
       open={props.open}
       onOpenChange={props.onOpenChange}
-      title="Auto Build Maker"
+      title="Build Solver"
       description="Beam search over item combinations. Uses Workbench summary metrics (legacy-style Base DPS / EHP, ability tree excluded)."
       footer={
         <div className="flex items-center justify-between gap-3">
@@ -375,7 +539,7 @@ export function AutoBuilderModal(props: {
                 <div>1. Start with a Primary Goal like <b>Damage</b> or <b>Tank / EHP</b>. Leave most constraints empty.</div>
                 <div>2. Add only a few hard constraints first: class/level, maybe one must-include item.</div>
                 <div>3. If you get 0 candidates, turn off <b>Only use pinned items in bins</b> and clear major-ID constraints.</div>
-                <div>4. The Auto Builder now filters out builds that fail skill requirements / equip order feasibility.</div>
+                <div>4. Build Solver filters out builds that fail skill requirements / equip order feasibility.</div>
                 <div>5. Use Workbench bins to guide it: pin good options, then rerun with pinned-only once you have enough items in each slot category.</div>
               </div>
             </div>
@@ -408,7 +572,7 @@ export function AutoBuilderModal(props: {
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
-                Auto Builder always filters out builds that fail skill point/equip-order feasibility. You do not need to set a minimum SP total.
+                Build Solver always filters out builds that fail skill point/equip-order feasibility. You do not need to set a minimum SP total.
               </div>
             </div>
           </div>
@@ -436,13 +600,6 @@ export function AutoBuilderModal(props: {
               <NumberField label="Min Base DPS" value={minLegacyBaseDps} onChange={setMinLegacyBaseDps} min={0} />
               <NumberField label="Min Effective HP" value={minLegacyEhp} onChange={setMinLegacyEhp} min={0} />
 
-              <div className="grid grid-cols-2 gap-2">
-                <NumberField label="Min MR" value={minMr} onChange={setMinMr} min={0} />
-                <NumberField label="Min MS" value={minMs} onChange={setMinMs} min={0} />
-                <NumberField label="Min Walk Speed" value={minSpeed} onChange={setMinSpeed} />
-                <NumberField label="Max Req Total" value={maxReqTotal} onChange={setMaxReqTotal} min={0} />
-              </div>
-
               <div>
                 <FieldLabel>Must-Include Items (comma-separated names)</FieldLabel>
                 <textarea
@@ -451,6 +608,13 @@ export function AutoBuilderModal(props: {
                   onChange={(e) => setMustIncludeText(e.target.value)}
                   placeholder="Example: Cancer, Stardew"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <NumberField label="Min MR" value={minMr} onChange={setMinMr} min={0} />
+                <NumberField label="Min MS" value={minMs} onChange={setMinMs} min={0} />
+                <NumberField label="Min Walk Speed" value={minSpeed} onChange={setMinSpeed} />
+                <NumberField label="Max Req Total" value={maxReqTotal} onChange={setMaxReqTotal} min={0} />
               </div>
               <div>
                 <FieldLabel>Excluded Items (comma-separated names)</FieldLabel>
@@ -461,6 +625,84 @@ export function AutoBuilderModal(props: {
                   placeholder="Blacklist item names"
                 />
               </div>
+
+              <details className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
+                <summary className="cursor-pointer text-sm font-medium">Advanced: Specific ID Min / Max</summary>
+                <div className="mt-3 grid gap-3">
+                  <div className="text-xs text-[var(--wb-muted)]">
+                    Set build-wide min/max totals for specific item IDs (for example `sdPct`, `poison`, `atkTier`, `hprRaw`). These are hard constraints.
+                  </div>
+                  {customIdThresholds.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-[var(--wb-border-muted)] px-3 py-2 text-xs text-[var(--wb-muted)]">
+                      No advanced ID thresholds yet.
+                    </div>
+                  ) : null}
+                  {customIdThresholds.map((row) => {
+                    const range = props.catalog?.facetsMeta.numericRanges[row.key];
+                    return (
+                      <div key={row.id} className="rounded-lg border border-[var(--wb-border-muted)] p-2">
+                        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_100px_100px_auto] sm:items-end">
+                          <div>
+                            <FieldLabel>ID</FieldLabel>
+                            <select
+                              className="wb-select"
+                              value={row.key}
+                              onChange={(e) => updateCustomIdThresholdRow(row.id, { key: e.target.value })}
+                            >
+                              {numericIdOptions.map((key) => (
+                                <option key={key} value={key}>
+                                  {formatNumericIdLabel(key)} ({key})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <FieldLabel>Min</FieldLabel>
+                            <input
+                              className="wb-input"
+                              type="number"
+                              value={row.min ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value.trim();
+                                updateCustomIdThresholdRow(row.id, { min: raw === '' ? null : Number(raw) });
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <FieldLabel>Max</FieldLabel>
+                            <input
+                              className="wb-input"
+                              type="number"
+                              value={row.max ?? ''}
+                              onChange={(e) => {
+                                const raw = e.target.value.trim();
+                                updateCustomIdThresholdRow(row.id, { max: raw === '' ? null : Number(raw) });
+                              }}
+                            />
+                          </div>
+                          <Button variant="ghost" onClick={() => removeCustomIdThresholdRow(row.id)}>
+                            Remove
+                          </Button>
+                        </div>
+                        {range ? (
+                          <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
+                            Catalog item range: {range.min} to {range.max} (per item)
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                  <div>
+                    <Button
+                      variant="ghost"
+                      onClick={addCustomIdThresholdRow}
+                      disabled={numericIdOptions.length === 0}
+                    >
+                      Add ID Threshold
+                    </Button>
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
 
@@ -566,6 +808,29 @@ export function AutoBuilderModal(props: {
           <div className="wb-card p-3">
             <div className="mb-3 text-sm font-semibold">Search Heuristics</div>
             <div className="grid gap-3">
+              <div>
+                <FieldLabel>Solver Strategy</FieldLabel>
+                <select
+                  className="wb-select"
+                  value={solverStrategy}
+                  onChange={(e) => setSolverStrategy(e.target.value as SolverStrategy)}
+                >
+                  {(Object.keys(SOLVER_STRATEGY_LABELS) as SolverStrategy[]).map((strategy) => (
+                    <option key={strategy} value={strategy}>
+                      {SOLVER_STRATEGY_LABELS[strategy]}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                  {solverStrategy === 'auto'
+                    ? 'Starts fast, then retries deeper if needed.'
+                    : solverStrategy === 'fast'
+                      ? 'Single fast pass. Lowest wait time, weakest fallback.'
+                      : solverStrategy === 'constraint'
+                        ? 'Better for strict attack-speed or advanced ID min/max constraints.'
+                        : 'Highest search budget and broader retries. Slowest, but strongest fallback.'}
+                </div>
+              </div>
               <ChipButton active={deepFallbackEnabled} onClick={() => setDeepFallbackEnabled((prev) => !prev)}>
                 Deep fallback if 0 results
               </ChipButton>
@@ -603,6 +868,7 @@ export function AutoBuilderModal(props: {
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
                 Locked slots from the Workbench will be preserved. Current locks: {Object.values(lockedSlots).filter(Boolean).length}
                 {onlyPinnedItems ? ' | Candidate pools restricted to pinned bins.' : ''}
+                {solverStrategy !== 'auto' ? ` | Strategy: ${SOLVER_STRATEGY_LABELS[solverStrategy]}.` : ''}
                 {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ''}
                 {useExhaustiveSmallPool ? ` | Exact enumeration is used automatically when pool combinations are <= ${Math.round(exhaustiveStateLimit).toLocaleString()}.` : ''}
               </div>
@@ -634,7 +900,7 @@ export function AutoBuilderModal(props: {
             <div className="min-h-0 space-y-2 overflow-auto pr-1 wb-scrollbar max-h-[52vh] lg:max-h-[56vh]">
               {results.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
-                  Run the Auto Build Maker to generate candidate builds.
+                  Run Build Solver to generate candidate builds.
                 </div>
               ) : (
                 results.map((candidate, index) => (

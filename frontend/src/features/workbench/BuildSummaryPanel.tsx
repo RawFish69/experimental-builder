@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Copy, ExternalLink, Link2, TreePine, Upload } from 'lucide-react';
+import { ExternalLink, Link2, TreePine } from 'lucide-react';
 import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
-import { ITEM_SLOTS, slotLabel } from '@/domain/items/types';
+import { slotLabel } from '@/domain/items/types';
 import { diffBuildSummary } from '@/domain/build/build-metrics';
 import { Button, KpiTile, Panel, ScrollArea } from '@/components/ui';
 import { ItemCard } from '@/features/workbench/ItemCard';
+import type { WorkbenchSpellPreviewResult } from '@/domain/ability-tree/spell-preview';
 
 function fmt(n: number): string {
   return Number.isFinite(n) ? Math.round(n).toLocaleString() : '-';
@@ -53,9 +54,6 @@ function getFocusedItem(props: {
 export interface SummaryActions {
   onOpenAutoBuilder(): void;
   onOpenAbilityTree(): void;
-  onExportWorkbench(): void;
-  onImportWorkbench(): void;
-  onShareWorkbench(): void;
   onCopyLegacyLink(): void;
   onOpenLegacyBuilder(): void;
 }
@@ -75,14 +73,12 @@ export function BuildSummaryPanel(props: {
   compareSummary?: BuildSummary | null;
   compareSlot?: ItemSlot | null;
   abilityTreeSummary?: AbilityTreeSummaryInfo | null;
+  spellPreview?: WorkbenchSpellPreviewResult | null;
   actions: SummaryActions;
 }) {
   const [showFocusedItemDetails, setShowFocusedItemDetails] = useState(false);
   const delta = props.compareSummary ? diffBuildSummary(props.summary, props.compareSummary) : null;
-  const equippedItems = ITEM_SLOTS.map((slot) => {
-    const id = props.snapshot.slots[slot];
-    return { slot, item: id == null ? null : props.catalog.itemsById.get(id) ?? null };
-  });
+  const meleePreview = props.spellPreview?.melee ?? null;
   const focusedItem = getFocusedItem(props);
 
   return (
@@ -96,11 +92,7 @@ export function BuildSummaryPanel(props: {
             Ability Tree
           </Button>
           <Button className="px-2 py-1 text-xs" onClick={props.actions.onOpenAutoBuilder}>
-            Auto Build
-          </Button>
-          <Button className="px-2 py-1 text-xs" variant="ghost" onClick={props.actions.onShareWorkbench} title="Share Workbench Link">
-            <Link2 size={12} className="mr-1 inline" />
-            Share
+            Build Solver
           </Button>
         </div>
       }
@@ -110,7 +102,7 @@ export function BuildSummaryPanel(props: {
           <div className="wb-card p-2.5">
             <div className="mb-2 flex items-center justify-between gap-2">
               <div>
-                <div className="text-[11px] uppercase tracking-wide text-[var(--wb-muted)]">Focused Item</div>
+                <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Focused Item</div>
                 <div className="text-xs text-[var(--wb-muted)]">{focusedItem.source}</div>
               </div>
               <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => setShowFocusedItemDetails((prev) => !prev)}>
@@ -124,30 +116,6 @@ export function BuildSummaryPanel(props: {
             Select or hover an item to inspect it here.
           </div>
         )}
-
-        <div className="grid grid-cols-2 gap-2">
-          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} />
-          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} />
-          <KpiTile label="Req Total" value={fmt(props.summary.derived.reqTotal)} />
-          <KpiTile label="SP Total" value={fmt(props.summary.derived.skillPointTotal)} delta={delta?.skillPointTotal ?? null} />
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
-            <span className="text-[var(--wb-muted)]">SP Feasibility:</span>{' '}
-            <span className={props.summary.derived.skillpointFeasible ? 'text-emerald-200' : 'text-rose-200'}>
-              {props.summary.derived.skillpointFeasible ? 'Wearable' : 'Invalid / Not Wearable'}
-            </span>
-          </div>
-          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
-            <span className="text-[var(--wb-muted)]">Assigned SP Needed:</span>{' '}
-            <span>{fmt(props.summary.derived.assignedSkillPointsRequired)}</span>
-          </div>
-        </div>
-
-        <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-[var(--wb-muted)]">
-          Workbench primary KPIs use legacy-compatible metrics (Base DPS + Effective HP). Ability tree editing is now in Workbench, but these summary metrics still exclude ability-tree effects for now. Proxy values are still used internally for search/autobuilder heuristics.
-        </div>
 
         {props.abilityTreeSummary ? (
           <div
@@ -170,6 +138,99 @@ export function BuildSummaryPanel(props: {
             {props.abilityTreeSummary.hasErrors ? <div className="mt-1">Tree has validation issues (dependencies/blockers/AP).</div> : null}
           </div>
         ) : null}
+
+        <div className="wb-card p-3">
+          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Melee DPS</div>
+          <div className="mt-1 flex items-end justify-between gap-2">
+            <div className="text-xl font-semibold text-cyan-100">{fmt(meleePreview?.dps ?? props.summary.derived.legacyBaseDps)}</div>
+            {delta?.legacyBaseDps != null ? (
+              <div className={['text-xs', delta.legacyBaseDps > 0 ? 'text-emerald-300' : delta.legacyBaseDps < 0 ? 'text-rose-300' : 'text-[var(--wb-muted)]'].join(' ')}>
+                {delta.legacyBaseDps > 0 ? '+' : ''}
+                {Math.round(delta.legacyBaseDps).toLocaleString()}
+              </div>
+            ) : null}
+          </div>
+          <div className="mt-1 text-xs text-[var(--wb-muted)]">
+            {meleePreview
+              ? `Legacy melee DPS (${meleePreview.attackSpeedTier}) • Per Attack ${fmt(meleePreview.perAttackAverage)}`
+              : 'Legacy melee DPS preview unavailable (equip a weapon and valid ability tree selection).'}{' '}
+            • Melee % / Raw {fmt(props.summary.aggregated.offense.meleePct)} / {fmt(props.summary.aggregated.offense.meleeRaw)}
+          </div>
+        </div>
+
+        {props.spellPreview ? (
+          <div className="wb-card p-3">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Spells (ATree)</div>
+              <div className="text-xs text-[var(--wb-muted)]">{props.spellPreview.spells.length} entries</div>
+            </div>
+            {props.spellPreview.notes.length > 0 ? (
+              <div className="mb-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2 text-xs text-amber-100">
+                {props.spellPreview.notes.join(' ')}
+              </div>
+            ) : null}
+            {props.spellPreview.spells.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-[var(--wb-border-muted)] p-2 text-xs text-[var(--wb-muted)]">
+                No spell damage entries yet. Select active ability-tree spell nodes (roots / spell upgrades).
+              </div>
+            ) : (
+              <ScrollArea className="max-h-[36vh] lg:max-h-[44vh]">
+                <div className="grid gap-2 pr-1">
+                  {props.spellPreview.spells.map((spell) => (
+                    <div key={`${spell.baseSpell}-${spell.name}`} className="rounded-lg border border-[var(--wb-border-muted)] bg-black/10 p-2">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <div className="font-semibold">
+                          {spell.name}
+                          <span className="ml-1 text-[var(--wb-muted)]">({spell.displayPartName})</span>
+                        </div>
+                        <div className="text-right">
+                          <div className={spell.isHealing ? 'text-emerald-200' : 'text-cyan-100'}>
+                            {Math.round(spell.averageDisplayValue).toLocaleString()} {spell.isHealing ? 'heal' : 'avg dmg'}
+                          </div>
+                          {spell.manaCost != null ? (
+                            <div className="text-xs text-[var(--wb-muted)]">{spell.manaCost.toFixed(2)} mana</div>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="mt-1 grid gap-1 text-xs text-[var(--wb-muted)]">
+                        {spell.parts
+                          .filter((part) => part.display)
+                          .map((part) => (
+                            <div key={part.name} className="flex items-center justify-between gap-2">
+                              <span className="truncate">{part.name}</span>
+                              <span className={part.type === 'heal' ? 'text-emerald-200' : 'text-cyan-100'}>
+                                {Math.round(part.averageTotal ?? 0).toLocaleString()}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-2">
+          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} />
+          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} />
+          <KpiTile label="Req Total" value={fmt(props.summary.derived.reqTotal)} />
+          <KpiTile label="SP Total" value={fmt(props.summary.derived.skillPointTotal)} delta={delta?.skillPointTotal ?? null} />
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
+            <span className="text-[var(--wb-muted)]">SP Feasibility:</span>{' '}
+            <span className={props.summary.derived.skillpointFeasible ? 'text-emerald-200' : 'text-rose-200'}>
+              {props.summary.derived.skillpointFeasible ? 'Wearable' : 'Invalid / Not Wearable'}
+            </span>
+          </div>
+          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
+            <span className="text-[var(--wb-muted)]">Assigned SP Needed:</span>{' '}
+            <span>{fmt(props.summary.derived.assignedSkillPointsRequired)}</span>
+          </div>
+        </div>
 
         {props.compareSummary && props.compareSlot ? (
           <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/8 p-3 text-xs text-emerald-100">
@@ -200,6 +261,9 @@ export function BuildSummaryPanel(props: {
             </div>
           </div>
         </div>
+        <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-[var(--wb-muted)]">
+          Workbench primary KPIs use legacy-compatible metrics (Base DPS + Effective HP). Ability tree editing is now in Workbench, but these summary metrics still exclude ability-tree effects for now. Proxy values are still used internally for search/Build Solver heuristics.
+        </div>
         <div className="grid gap-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Warnings</div>
           {props.summary.warnings.messages.length === 0 ? (
@@ -219,27 +283,7 @@ export function BuildSummaryPanel(props: {
           )}
         </div>
 
-        <div className="grid gap-2">
-          <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Equipped</div>
-          <div className="grid gap-1 text-xs">
-            {equippedItems.map(({ slot, item }) => (
-              <div key={slot} className="flex items-center justify-between rounded-lg border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1.5">
-                <span className="text-[var(--wb-muted)]">{slotLabel(slot)}</span>
-                <span className={item ? '' : 'text-[var(--wb-muted)]'}>{item?.displayName ?? 'Empty'}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="ghost" className="justify-start" onClick={props.actions.onExportWorkbench}>
-            <Copy size={14} className="mr-2" />
-            Export
-          </Button>
-          <Button variant="ghost" className="justify-start" onClick={props.actions.onImportWorkbench}>
-            <Upload size={14} className="mr-2" />
-            Import
-          </Button>
           <Button variant="ghost" className="justify-start" onClick={props.actions.onCopyLegacyLink} disabled={!props.snapshot.legacyHash}>
             <Link2 size={14} className="mr-2" />
             Legacy Link

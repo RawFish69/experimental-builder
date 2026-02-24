@@ -2,7 +2,7 @@
 
 ## Workbench docs
 - `ARCHITECTURE.md` - Workbench app structure and data flow
-- `AUTO_BUILDER.md` - Auto Builder engine notes and tuning
+- `AUTO_BUILDER.md` - Build Solver engine notes and tuning
 
 ## Legacy docs / notes
 - `legacy/ENCODING.md` - legacy builder encoding notes

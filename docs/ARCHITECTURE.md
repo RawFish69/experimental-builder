@@ -27,7 +27,7 @@ This repo now has two app surfaces:
 3. Search panel updates query/filter state
 4. Workbench store manages slots/bins/locks/undo/redo
 5. Build summary is recalculated from the same catalog + snapshot
-6. Auto Builder uses the same catalog/snapshot/summary logic and returns candidates
+6. Build Solver uses the same catalog/snapshot/summary logic and returns candidates
 
 ## Compatibility notes
 
