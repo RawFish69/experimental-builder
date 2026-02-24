@@ -18,6 +18,36 @@ interface BeamNode {
   customTotals?: number[];
 }
 
+// Groups of items that are illegal to use together (legacy builder rules).
+// Each group means: at most one of these items may appear in a valid build.
+const ILLEGAL_ITEM_GROUPS: string[][] = [
+  // Hive master rewards: Twilight-Gilded Cloak + Prowess
+  ['Twilight-Gilded Cloak', 'Prowess'],
+];
+
+function slotsRespectIllegalItemGroups(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+): boolean {
+  if (ILLEGAL_ITEM_GROUPS.length === 0) return true;
+  const equippedIds = new Set<number>();
+  for (const slot of ITEM_SLOTS) {
+    const id = slots[slot];
+    if (id != null) equippedIds.add(id);
+  }
+  for (const group of ILLEGAL_ITEM_GROUPS) {
+    let count = 0;
+    for (const name of group) {
+      const id = catalog.itemIdByName.get(name.toLowerCase());
+      if (id != null && equippedIds.has(id)) {
+        count++;
+        if (count > 1) return false;
+      }
+    }
+  }
+  return true;
+}
+
 const TOME_ASSIST_FALLBACKS: Array<[number, number, number, number, number]> = [
   [10, 10, 10, 10, 10],
   [20, 20, 20, 20, 20],
@@ -356,20 +386,7 @@ function validateFinalHardConstraints(
     // Recheck item-level hard constraints on locked / must-include items too.
     if (!itemMatchesGlobalConstraints(item, constraints)) return { ok: false, reason: 'item' };
   }
-
-  // Enforce legacy "illegal item combination" rules for certain quest rewards.
-  // Example: Hive rewards like Twilight-Gilded Cloak and Prowess (quest: The Qira Hive)
-  // cannot be used together; at most one such item is allowed in a build.
-  let hiveQuestCount = 0;
-  for (const slot of ITEM_SLOTS) {
-    const itemId = slots[slot];
-    if (itemId == null) continue;
-    const item = catalog.itemsById.get(itemId);
-    if (!item) continue;
-    const quest = typeof item.legacyRaw.quest === 'string' ? (item.legacyRaw.quest as string) : null;
-    if (quest === 'The Qira Hive') hiveQuestCount++;
-  }
-  if (hiveQuestCount > 1) {
+  if (!slotsRespectIllegalItemGroups(slots, catalog)) {
     return { ok: false, reason: 'item' };
   }
 
