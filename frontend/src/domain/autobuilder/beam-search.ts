@@ -17,35 +17,23 @@ interface BeamNode {
   /** Running totals for Advanced: Specific ID min/max constraints (customNumericRanges). */
   customTotals?: number[];
 }
-
-// Groups of items that are illegal to use together (legacy builder rules).
-// Each group means: at most one of these items may appear in a valid build.
-const ILLEGAL_ITEM_GROUPS: string[][] = [
-  // Hive master rewards: Twilight-Gilded Cloak + Prowess
-  ['Twilight-Gilded Cloak', 'Prowess'],
-];
-
-function slotsRespectIllegalItemGroups(
+function computeActiveSetCounts(
   slots: WorkbenchSnapshot['slots'],
   catalog: CatalogSnapshot,
-): boolean {
-  if (ILLEGAL_ITEM_GROUPS.length === 0) return true;
-  const equippedIds = new Set<number>();
+): Map<string, number> {
+  const counts = new Map<string, number>();
   for (const slot of ITEM_SLOTS) {
     const id = slots[slot];
-    if (id != null) equippedIds.add(id);
+    if (id == null) continue;
+    const item = catalog.itemsById.get(id);
+    if (!item) continue;
+    const setNameRaw = (item.legacyRaw as any)?.set;
+    const setName = typeof setNameRaw === 'string' ? setNameRaw : '';
+    const key = setName.trim();
+    if (!key) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  for (const group of ILLEGAL_ITEM_GROUPS) {
-    let count = 0;
-    for (const name of group) {
-      const id = catalog.itemIdByName.get(name.toLowerCase());
-      if (id != null && equippedIds.has(id)) {
-        count++;
-        if (count > 1) return false;
-      }
-    }
-  }
-  return true;
+  return counts;
 }
 
 const TOME_ASSIST_FALLBACKS: Array<[number, number, number, number, number]> = [
@@ -386,8 +374,16 @@ function validateFinalHardConstraints(
     // Recheck item-level hard constraints on locked / must-include items too.
     if (!itemMatchesGlobalConstraints(item, constraints)) return { ok: false, reason: 'item' };
   }
-  if (!slotsRespectIllegalItemGroups(slots, catalog)) {
-    return { ok: false, reason: 'item' };
+
+  // Enforce legacy "illegal item combination" rules driven by set metadata.
+  // Mirror old builder: for each active set, if bonuses[count-1].illegal is true, the combo is illegal.
+  const setCounts = computeActiveSetCounts(slots, catalog);
+  for (const [setName, count] of setCounts) {
+    const meta = catalog.setsMeta.get(setName);
+    if (!meta) continue;
+    if (meta.illegalCounts.includes(count)) {
+      return { ok: false, reason: 'item' };
+    }
   }
 
   if (constraints.weaponAttackSpeeds.length > 0) {

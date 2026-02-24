@@ -1,4 +1,12 @@
-import type { CatalogSnapshot, CharacterClass, ItemNumericStats, ItemTier, NormalizedItem, RawCompressPayload } from '@/domain/items/types';
+import type {
+  CatalogSnapshot,
+  CatalogSetMeta,
+  CharacterClass,
+  ItemNumericStats,
+  ItemTier,
+  NormalizedItem,
+  RawCompressPayload,
+} from '@/domain/items/types';
 import { getClassFromWeaponType, itemCategoryFromRaw, ITEM_CATEGORY_KEYS } from '@/domain/items/types';
 
 const NUMERIC_INDEX_KEYS = [
@@ -241,6 +249,7 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
   const classReqs = new Set<CharacterClass>();
   const majorIds = new Set<string>();
   const numericRanges: Record<string, { min: number; max: number }> = {};
+  const setsMeta: Map<string, CatalogSetMeta> = new Map();
 
   for (const item of items) {
     itemsById.set(item.id, item);
@@ -259,6 +268,22 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
     }
   }
 
+  // Normalize legacy set metadata (for illegal-combination rules).
+  const rawSets = payload.sets ?? {};
+  for (const [setName, raw] of Object.entries(rawSets)) {
+    const bonuses = (raw as any)?.bonuses;
+    if (!Array.isArray(bonuses)) continue;
+    const illegalCounts: number[] = [];
+    bonuses.forEach((bonus, index) => {
+      if (bonus && typeof bonus === 'object' && (bonus as any).illegal) {
+        illegalCounts.push(index + 1); // bonuses[count-1]
+      }
+    });
+    if (illegalCounts.length > 0) {
+      setsMeta.set(setName, { illegalCounts });
+    }
+  }
+
   return {
     version: String(payload.version ?? 'unknown'),
     items,
@@ -274,5 +299,6 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
       majorIds: [...majorIds].sort(),
       numericRanges,
     },
+    setsMeta,
   };
 }

@@ -120,6 +120,11 @@ export interface FacetsMeta {
   numericRanges: Record<string, { min: number; max: number }>;
 }
 
+export interface CatalogSetMeta {
+  /** 1-based piece counts that are illegal for this set (from legacy `bonuses[count-1].illegal`). */
+  illegalCounts: number[];
+}
+
 export interface CatalogSnapshot {
   version: string;
   items: NormalizedItem[];
@@ -128,6 +133,8 @@ export interface CatalogSnapshot {
   itemsByType: Map<string, number[]>;
   itemsByCategory: Map<ItemCategoryKey, number[]>;
   facetsMeta: FacetsMeta;
+  /** Legacy set metadata used for illegal-combination checks, keyed by set name. */
+  setsMeta: Map<string, CatalogSetMeta>;
 }
 
 export interface RawCompressPayload {
