@@ -135,6 +135,11 @@ export interface CatalogSnapshot {
   facetsMeta: FacetsMeta;
   /** Legacy set metadata used for illegal-combination checks, keyed by set name. */
   setsMeta: Map<string, CatalogSetMeta>;
+  /**
+   * Reverse-map from item ID to its set name, built from the legacy `sets` block.
+   * Items themselves carry no `set` field in the data — membership is defined on the set side.
+   */
+  itemSetName: Map<number, string>;
 }
 
 export interface RawCompressPayload {

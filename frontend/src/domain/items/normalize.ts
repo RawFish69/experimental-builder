@@ -269,7 +269,9 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
   }
 
   // Normalize legacy set metadata (for illegal-combination rules).
+  // Items carry no `set` field themselves — membership is defined on the set side via item names.
   const rawSets = payload.sets ?? {};
+  const itemSetName = new Map<string, string>(); // item displayName (lower) → set name (interim)
   for (const [setName, raw] of Object.entries(rawSets)) {
     const bonuses = (raw as any)?.bonuses;
     if (!Array.isArray(bonuses)) continue;
@@ -281,6 +283,25 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
     });
     if (illegalCounts.length > 0) {
       setsMeta.set(setName, { illegalCounts });
+    }
+    // Register every member item name regardless of whether the set is illegal,
+    // so we can resolve set membership for all items.
+    const members = (raw as any)?.items;
+    if (Array.isArray(members)) {
+      for (const memberName of members) {
+        if (typeof memberName === 'string') {
+          itemSetName.set(memberName.toLowerCase(), setName);
+        }
+      }
+    }
+  }
+
+  // Build ID-keyed reverse-map now that itemIdByName is fully populated.
+  const itemSetNameById = new Map<number, string>();
+  for (const [nameLower, setName] of itemSetName) {
+    const id = itemIdByName.get(nameLower);
+    if (id != null) {
+      itemSetNameById.set(id, setName);
     }
   }
 
@@ -300,5 +321,6 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
       numericRanges,
     },
     setsMeta,
+    itemSetName: itemSetNameById,
   };
 }

@@ -25,15 +25,37 @@ function computeActiveSetCounts(
   for (const slot of ITEM_SLOTS) {
     const id = slots[slot];
     if (id == null) continue;
-    const item = catalog.itemsById.get(id);
-    if (!item) continue;
-    const setNameRaw = (item.legacyRaw as any)?.set;
-    const setName = typeof setNameRaw === 'string' ? setNameRaw : '';
-    const key = setName.trim();
-    if (!key) continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    // Set membership is stored in catalog.itemSetName (reverse-mapped from the sets block).
+    // Items carry no `set` field themselves in the compressed data.
+    const setName = catalog.itemSetName.get(id);
+    if (!setName) continue;
+    counts.set(setName, (counts.get(setName) ?? 0) + 1);
   }
   return counts;
+}
+
+/**
+ * Returns true if placing `itemId` into any slot would immediately create an illegal
+ * item-combination (i.e. the set this item belongs to would exceed its legal count limit).
+ * Used during beam expansion for early pruning.
+ */
+function wouldCreateIllegalCombo(
+  itemId: number,
+  currentSlots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+): boolean {
+  const setName = catalog.itemSetName.get(itemId);
+  if (!setName) return false;
+  const meta = catalog.setsMeta.get(setName);
+  if (!meta) return false;
+  let existingCount = 0;
+  for (const s of ITEM_SLOTS) {
+    const sid = currentSlots[s];
+    if (sid != null && catalog.itemSetName.get(sid) === setName) {
+      existingCount++;
+    }
+  }
+  return meta.illegalCounts.includes(existingCount + 1);
 }
 
 const TOME_ASSIST_FALLBACKS: Array<[number, number, number, number, number]> = [
@@ -1145,6 +1167,9 @@ function runFeasibilityBiasedBeamSearch(params: {
         processedStates++;
         branched++;
 
+        // Early-exit: skip items that would immediately violate an illegal-combination rule.
+        if (wouldCreateIllegalCombo(entry.id, node.slots, catalog)) continue;
+
         const nextSlots = cloneSlots(node.slots);
         nextSlots[slot] = entry.id;
         const item = catalog.itemsById.get(entry.id);
@@ -1320,6 +1345,8 @@ function enumerateExactCandidates(params: {
     for (const entry of pool) {
       processedStates++;
       if (processedStates > constraints.maxStates) break;
+      // Early-exit: skip items that would immediately violate an illegal-combination rule.
+      if (wouldCreateIllegalCombo(entry.id, slots, catalog)) continue;
       slots[slot] = entry.id;
       if (processedStates % 2000 === 0) {
         onProgress?.({
@@ -1514,6 +1541,9 @@ export function runAutoBuildBeamSearch(params: {
         }
         processedStates++;
         branched++;
+
+        // Early-exit: skip items that would immediately violate an illegal-combination rule.
+        if (wouldCreateIllegalCombo(entry.id, node.slots, catalog)) continue;
 
         const nextSlots = cloneSlots(node.slots);
         nextSlots[slot] = entry.id;
