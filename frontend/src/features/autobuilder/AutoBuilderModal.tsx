@@ -89,7 +89,6 @@ const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
 };
 
 const SOLVER_STRATEGY_ORDER: SolverStrategy[] = ['auto', 'fast', 'constraint', 'exhaustive'];
-const NON_AUTO_STRATEGIES: SolverStrategy[] = ['fast', 'constraint', 'exhaustive'];
 
 function formatNumericIdLabel(key: string): string {
   const labels: Record<string, string> = {
@@ -347,7 +346,7 @@ export function AutoBuilderModal(props: {
             return [fast, ...(deepFallbackEnabled ? [deep, bruteish, feasibilityRescue] : [])];
         }
       };
-      const strategies = solverStrategies.length > 0 ? solverStrategies : ['auto'];
+      const strategies: SolverStrategy[] = solverStrategies.length > 0 ? solverStrategies : ['auto'];
       if (strategies.length === 1 && strategies[0] === 'auto') {
         return forStrategy('auto');
       }
