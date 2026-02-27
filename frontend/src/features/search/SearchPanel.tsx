@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { Search, SlidersHorizontal } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { CatalogSnapshot, ItemSlot } from '@/domain/items/types';
 import { categoryLabel, ITEM_CATEGORY_KEYS, slotToCategory } from '@/domain/items/types';
@@ -108,7 +108,6 @@ export function SearchPanel(props: {
   onPin(itemId: number): void;
   onEquip(itemId: number): void;
   onHover(itemId: number | null, slot: ItemSlot | null): void;
-  onOpenAutoBuilder(): void;
 }) {
   const [presets, setPresets] = useState<SearchPreset[]>(() => (typeof window === 'undefined' ? [] : loadPresets()));
   const majorIdSuggestions = useMemo(() => props.catalog.facetsMeta.majorIds.slice(0, 20), [props.catalog]);
@@ -129,12 +128,7 @@ export function SearchPanel(props: {
           Advanced Item Search
         </div>
       }
-      headerRight={
-        <Button className="px-2 py-1 text-xs" onClick={props.onOpenAutoBuilder}>
-          <Sparkles size={12} className="mr-1 inline" />
-          Build Solver
-        </Button>
-      }
+      headerRight={null}
     >
       <div className="flex min-h-0 flex-col gap-3 p-3">
         <div>

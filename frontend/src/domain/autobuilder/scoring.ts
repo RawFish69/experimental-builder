@@ -54,6 +54,8 @@ export function scoreSummary(summary: BuildSummary, weights: AutoBuilderWeights,
     legacyBaseDps: summary.derived.legacyBaseDps * weights.legacyBaseDps,
     legacyEhp: summary.derived.legacyEhp * weights.legacyEhp,
     dpsProxy: summary.derived.dpsProxy * weights.dpsProxy,
+    spellProxy: summary.derived.spellProxy * weights.spellProxy,
+    meleeProxy: summary.derived.meleeProxy * weights.meleeProxy,
     ehpProxy: summary.derived.ehpProxy * weights.ehpProxy,
     speed: summary.aggregated.speed * weights.speed,
     sustain: sustain * weights.sustain,
@@ -65,6 +67,8 @@ export function scoreSummary(summary: BuildSummary, weights: AutoBuilderWeights,
     breakdown.legacyBaseDps +
     breakdown.legacyEhp +
     breakdown.dpsProxy +
+    breakdown.spellProxy +
+    breakdown.meleeProxy +
     breakdown.ehpProxy +
     breakdown.speed +
     breakdown.sustain +

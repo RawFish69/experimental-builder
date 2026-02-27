@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { immer } from 'zustand/middleware/immer';
 import type { CharacterClass, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { ITEM_CATEGORY_KEYS, ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
-import type { ComparePreview, WorkbenchBuildState, WorkbenchSnapshot } from '@/domain/build/types';
+import type { ComparePreview, CraftedSlotInfo, WorkbenchBuildState, WorkbenchSnapshot } from '@/domain/build/types';
 
 const EMPTY_COMPARE: ComparePreview = { itemId: null, slot: null };
 
@@ -24,6 +24,7 @@ function createEmptyLocks(): Record<ItemSlot, boolean> {
 export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
   return {
     slots: createEmptySlots(),
+    craftedSlots: {},
     binsByCategory: createEmptyBins(),
     locks: createEmptyLocks(),
     level: 106,
@@ -37,6 +38,7 @@ export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
 function snapshotOf(state: WorkbenchBuildState): WorkbenchSnapshot {
   return {
     slots: { ...state.slots },
+    craftedSlots: { ...state.craftedSlots },
     binsByCategory: Object.fromEntries(
       ITEM_CATEGORY_KEYS.map((category) => [category, [...state.binsByCategory[category]]]),
     ) as WorkbenchSnapshot['binsByCategory'],
@@ -59,6 +61,7 @@ function pushHistory(state: WorkbenchBuildState): void {
 
 function applySnapshot(state: WorkbenchBuildState, snap: WorkbenchSnapshot): void {
   state.slots = { ...snap.slots };
+  state.craftedSlots = { ...snap.craftedSlots };
   state.binsByCategory = Object.fromEntries(
     ITEM_CATEGORY_KEYS.map((category) => [category, [...snap.binsByCategory[category]]]),
   ) as WorkbenchSnapshot['binsByCategory'];
@@ -101,6 +104,8 @@ export interface WorkbenchStore extends WorkbenchBuildState {
     sourceSlot?: ItemSlot;
   }): void;
   toggleLock(slot: ItemSlot): void;
+  equipCraftedItem(slot: ItemSlot, info: CraftedSlotInfo): void;
+  clearCraftedSlot(slot: ItemSlot): void;
   undo(): void;
   redo(): void;
   hydrateSnapshot(snapshot: Partial<WorkbenchSnapshot>): void;
@@ -172,6 +177,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       set((state) => {
         pushHistory(state);
         state.slots = createEmptySlots();
+        state.craftedSlots = {};
         state.binsByCategory = createEmptyBins();
         state.comparePreview = { ...EMPTY_COMPARE };
         state.legacyHash = null;
@@ -182,6 +188,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       set((state) => {
         pushHistory(state);
         state.slots[slot] = itemId;
+        delete state.craftedSlots[slot];
         state.selectedSlot = slot;
       });
     },
@@ -211,6 +218,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         pushHistory(state);
         const previousTarget = state.slots[targetSlot];
         state.slots[targetSlot] = itemId;
+        delete state.craftedSlots[targetSlot];
         state.selectedSlot = targetSlot;
         if (source === 'bin' && sourceCategory) {
           state.binsByCategory[sourceCategory] = state.binsByCategory[sourceCategory].filter((id) => id !== itemId);
@@ -240,6 +248,22 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       set((state) => {
         pushHistory(state);
         state.locks[slot] = !state.locks[slot];
+      });
+    },
+
+    equipCraftedItem(slot, info) {
+      set((state) => {
+        pushHistory(state);
+        state.slots[slot] = null;
+        state.craftedSlots[slot] = info;
+        state.selectedSlot = slot;
+      });
+    },
+
+    clearCraftedSlot(slot) {
+      set((state) => {
+        pushHistory(state);
+        delete state.craftedSlots[slot];
       });
     },
 
@@ -274,6 +298,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
           ...next,
           ...snapshot,
           slots: { ...next.slots, ...(snapshot.slots ?? {}) },
+          craftedSlots: { ...next.craftedSlots, ...(snapshot.craftedSlots ?? {}) },
           locks: { ...next.locks, ...(snapshot.locks ?? {}) },
           binsByCategory: {
             ...next.binsByCategory,

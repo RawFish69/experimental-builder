@@ -50,6 +50,8 @@ const NUMERIC_INDEX_KEYS = [
   'nDamPct',
   'slots',
   'lvl',
+  // Spell cost (Legacy: 1st–4th Spell Cost % and Raw)
+  'spPct1', 'spRaw1', 'spPct2', 'spRaw2', 'spPct3', 'spRaw3', 'spPct4', 'spRaw4',
 ];
 
 function asNumber(value: unknown): number {
@@ -157,6 +159,8 @@ function buildNumericIndex(raw: Record<string, unknown>): Record<string, number>
     result.hprRaw * 1.2 +
     result.hprPct * 2.5;
   result.utilityScore = result.spd * 1.8 + result.mr * 8 + result.ms * 7 + result.ls * 6;
+  result.sumSpPct = result.spPct1 + result.spPct2 + result.spPct3 + result.spPct4;
+  result.sumSpRaw = result.spRaw1 + result.spRaw2 + result.spRaw3 + result.spRaw4;
   return result;
 }
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ExternalLink, Link2, Network } from 'lucide-react';
+import { ExternalLink, Link2 } from 'lucide-react';
 import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
 import { slotLabel } from '@/domain/items/types';
@@ -52,7 +52,6 @@ function getFocusedItem(props: {
 }
 
 export interface SummaryActions {
-  onOpenAutoBuilder(): void;
   onOpenAbilityTree(): void;
   onCopyLegacyLink(): void;
   onOpenLegacyBuilder(): void;
@@ -85,17 +84,7 @@ export function BuildSummaryPanel(props: {
     <Panel
       className="flex min-h-0 flex-col"
       title="Live Build Summary"
-      headerRight={
-        <div className="flex gap-1">
-          <Button className="inline-flex items-center gap-1.5 px-2 py-1 text-xs" variant="ghost" onClick={props.actions.onOpenAbilityTree}>
-            <Network size={12} />
-            Ability Tree
-          </Button>
-          <Button className="inline-flex items-center px-2 py-1 text-xs" onClick={props.actions.onOpenAutoBuilder}>
-            Build Solver
-          </Button>
-        </div>
-      }
+      headerRight={null}
     >
       <div className="flex flex-col gap-3 p-3">
         {focusedItem ? (

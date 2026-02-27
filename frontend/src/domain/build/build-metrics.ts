@@ -22,11 +22,15 @@ const EMPTY_SUMMARY: BuildSummary = {
       spellRaw: 0,
       meleePct: 0,
       meleeRaw: 0,
+      elemDamPct: 0,
+      genericDamPct: 0,
       offenseScore: 0,
     },
   },
   derived: {
     dpsProxy: 0,
+    spellProxy: 0,
+    meleeProxy: 0,
     ehpProxy: 0,
     reqTotal: 0,
     skillPointTotal: 0,
@@ -308,6 +312,11 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     summary.aggregated.offense.spellRaw += item.numeric.sdRaw;
     summary.aggregated.offense.meleePct += item.numeric.mdPct;
     summary.aggregated.offense.meleeRaw += item.numeric.mdRaw;
+    summary.aggregated.offense.elemDamPct +=
+      item.numeric.eDamPct + item.numeric.tDamPct + item.numeric.wDamPct +
+      item.numeric.fDamPct + item.numeric.aDamPct;
+    summary.aggregated.offense.genericDamPct +=
+      item.numeric.damPct + item.numeric.rDamPct + item.numeric.nDamPct;
     summary.aggregated.offense.offenseScore += item.roughScoreFields.offense;
 
     const classReq = item.classReq;
@@ -363,12 +372,24 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     options.skillpointFeasibility,
   );
 
+  const { spellPct, spellRaw, meleePct, meleeRaw, baseDps, elemDamPct, genericDamPct } = summary.aggregated.offense;
+  const sp = summary.aggregated.skillPoints;
+  const strPct = skillPointsToPercentage(sp.str);
+
+  // STR multiplies all damage globally (Legacy strBoost = 1 + skill_boost[str]). Other stats (dex/int/def/agi)
+  // scale element-specific damage; STR is the main universal damage multiplier.
+  const skillMult = 1 + strPct;
+
+  // Spell: (base_dps + spell_raw + base_dps*spell_dmg% + elem_dps*elem_dmg%) * skill mult
+  const spellProxy =
+    (baseDps * (1 + (spellPct + elemDamPct + genericDamPct) / 100) + spellRaw) * skillMult;
+
+  // Melee: same structure
+  const meleeProxy =
+    (baseDps * (1 + (meleePct + elemDamPct + genericDamPct) / 100) + meleeRaw) * skillMult;
   const dpsProxy =
-    summary.aggregated.offense.baseDps +
-    summary.aggregated.offense.spellPct * 1.3 +
-    summary.aggregated.offense.spellRaw * 0.12 +
-    summary.aggregated.offense.meleePct * 1.1 +
-    summary.aggregated.offense.meleeRaw * 0.12 +
+    meleeProxy +
+    spellProxy +
     summary.aggregated.speed * 0.8;
 
   const defWeighted =
@@ -395,6 +416,8 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
 
   summary.derived = {
     dpsProxy,
+    spellProxy,
+    meleeProxy,
     ehpProxy,
     reqTotal,
     skillPointTotal,

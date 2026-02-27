@@ -4,9 +4,31 @@ import { CSS } from '@dnd-kit/utilities';
 import { Copy, Link2, Lock, Trash2, Undo2, Upload } from 'lucide-react';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { categoryLabel, slotLabel, slotToCategory } from '@/domain/items/types';
+import type { CraftedSlotInfo } from '@/domain/build/types';
 import type { WorkbenchStore } from '@/domain/build/workbench-state';
 import { Button, Panel, ScrollArea, cn } from '@/components/ui';
 import { ItemCard } from '@/features/workbench/ItemCard';
+
+function CraftedSlotCard(props: { info: CraftedSlotInfo; onClear: () => void }) {
+  const { info } = props;
+  return (
+    <div className="rounded-lg border border-violet-400/40 bg-violet-400/8 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold text-violet-100">
+            Crafted {info.type.charAt(0).toUpperCase() + info.type.slice(1)}
+          </div>
+          <div className="mt-0.5 text-[10px] text-violet-200/60">
+            Lv. {info.lvl} | {info.hash.slice(0, 20)}...
+          </div>
+        </div>
+        <Button className="px-2 py-1 text-xs" variant="ghost" onClick={props.onClear} title="Remove crafted item">
+          <Trash2 size={12} />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 function SlotCard(props: {
   slot: ItemSlot;
@@ -18,6 +40,7 @@ function SlotCard(props: {
   const { isOver, setNodeRef } = useDroppable({ id: `slot:${props.slot}`, data: { droppableType: 'slot', slot: props.slot } });
   const itemId = props.store.slots[props.slot];
   const item = itemId != null ? props.catalog.itemsById.get(itemId) : undefined;
+  const craftedInfo: CraftedSlotInfo | undefined = props.store.craftedSlots[props.slot];
 
   const draggable = useDraggable({
     id: item ? `slot-item:${props.slot}:${item.id}` : `slot-empty:${props.slot}`,
@@ -65,6 +88,8 @@ function SlotCard(props: {
             onHover={(hovering) => props.onHoverItem?.(hovering ? item.id : null, hovering ? props.slot : null)}
           />
         </div>
+      ) : craftedInfo ? (
+        <CraftedSlotCard info={craftedInfo} onClear={() => props.store.clearCraftedSlot(props.slot)} />
       ) : (
         <div className="rounded-lg border border-dashed border-[var(--wb-border)] px-3 py-3 text-center text-xs text-[var(--wb-muted)]">
           Drop a {slotToCategory(props.slot)} item here

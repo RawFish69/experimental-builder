@@ -5,6 +5,8 @@ export interface AutoBuilderWeights {
   legacyBaseDps: number;
   legacyEhp: number;
   dpsProxy: number;
+  spellProxy: number;  // spellPct*1.3 + spellRaw*0.12 (Legacy Builder spell damage)
+  meleeProxy: number; // baseDps + meleePct*1.1 + meleeRaw*0.12 (Legacy Builder melee damage)
   ehpProxy: number;
   speed: number;
   sustain: number;
@@ -56,6 +58,8 @@ export interface AutoBuildScoreBreakdown {
   legacyBaseDps: number;
   legacyEhp: number;
   dpsProxy: number;
+  spellProxy: number;
+  meleeProxy: number;
   ehpProxy: number;
   speed: number;
   sustain: number;
@@ -84,6 +88,8 @@ export const DEFAULT_AUTO_BUILDER_WEIGHTS: AutoBuilderWeights = {
   legacyBaseDps: 1,
   legacyEhp: 0.7,
   dpsProxy: 1,
+  spellProxy: 0,
+  meleeProxy: 0,
   ehpProxy: 0.6,
   speed: 0.4,
   sustain: 0.35,

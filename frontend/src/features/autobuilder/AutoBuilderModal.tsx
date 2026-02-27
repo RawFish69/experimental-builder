@@ -58,7 +58,7 @@ function parseRejectStatsFromDetail(detail: string | undefined): { spInvalid: nu
 }
 
 const WEAPON_ATTACK_SPEED_OPTIONS = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
-type OptimizationPreset = 'balanced' | 'damage' | 'tank' | 'spell' | 'melee' | 'speed' | 'sustain' | 'constraints';
+type OptimizationPreset = 'constraints' | 'spell' | 'melee' | 'mobility' | 'tank';
 type SolverStrategy = 'auto' | 'fast' | 'constraint' | 'exhaustive';
 type CustomIdThresholdRow = {
   id: number;
@@ -69,17 +69,13 @@ type CustomIdThresholdRow = {
 
 const OPTIMIZATION_PRESET_LABELS: Record<OptimizationPreset, string> = {
   constraints: 'Advanced IDs only',
-  balanced: 'Balanced',
-  damage: 'Damage',
-  tank: 'Tank / EHP',
-  spell: 'Spell Caster',
+  spell: 'Spell Damage',
   melee: 'Melee',
-  speed: 'Mobility',
-  sustain: 'Sustain',
+  mobility: 'Mobility',
+  tank: 'Tank / EHP',
 };
 
-const PRIMARY_GOAL_ORDER: OptimizationPreset[] = ['constraints', 'balanced', 'damage', 'tank', 'spell', 'melee', 'speed', 'sustain'];
-const SECONDARY_GOAL_OPTIONS: OptimizationPreset[] = ['balanced', 'damage', 'tank', 'spell', 'melee', 'speed', 'sustain'];
+const PRIMARY_GOAL_ORDER: OptimizationPreset[] = ['constraints', 'spell', 'melee', 'mobility', 'tank'];
 
 const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
   auto: 'All',
@@ -90,88 +86,106 @@ const SOLVER_STRATEGY_LABELS: Record<SolverStrategy, string> = {
 
 const SOLVER_STRATEGY_ORDER: SolverStrategy[] = ['auto', 'fast', 'constraint', 'exhaustive'];
 
+/** Full display names for item IDs (from Legacy Builder display_constants idPrefixes). */
+const NUMERIC_ID_FULL_NAMES: Record<string, string> = {
+  hp: 'Health',
+  hpBonus: 'Health Bonus',
+  hprRaw: 'Raw Health Regen',
+  hprPct: 'Health Regen %',
+  mr: 'Mana Regen',
+  ms: 'Mana Steal',
+  ls: 'Life Steal',
+  sdPct: 'Spell Damage %',
+  sdRaw: 'Spell Damage Raw',
+  mdPct: 'Melee Damage %',
+  mdRaw: 'Melee Damage Raw',
+  poison: 'Poison',
+  spd: 'Walk Speed Bonus',
+  atkTier: 'Attack Speed Bonus',
+  averageDps: 'Average DPS',
+  str: 'Strength',
+  dex: 'Dexterity',
+  int: 'Intelligence',
+  def: 'Defense',
+  agi: 'Agility',
+  strReq: 'Strength Min',
+  dexReq: 'Dexterity Min',
+  intReq: 'Intelligence Min',
+  defReq: 'Defense Min',
+  agiReq: 'Agility Min',
+  eDef: 'Earth Defense',
+  tDef: 'Thunder Defense',
+  wDef: 'Water Defense',
+  fDef: 'Fire Defense',
+  aDef: 'Air Defense',
+  eDamPct: 'Earth Damage %',
+  tDamPct: 'Thunder Damage %',
+  wDamPct: 'Water Damage %',
+  fDamPct: 'Fire Damage %',
+  aDamPct: 'Air Damage %',
+  damPct: 'Damage %',
+  rDamPct: 'Elemental Damage %',
+  nDamPct: 'Neutral Damage %',
+  slots: 'Powder Slots',
+  lvl: 'Combat Level',
+  reqTotal: 'Req Total',
+  skillPointTotal: 'Skill Point Total',
+  offenseScore: 'Offense Score',
+  ehpProxy: 'EHP Proxy',
+  utilityScore: 'Utility Score',
+  // Spell cost (negative = reduction)
+  spPct1: '1st Spell Cost %',
+  spRaw1: '1st Spell Cost Raw',
+  spPct2: '2nd Spell Cost %',
+  spRaw2: '2nd Spell Cost Raw',
+  spPct3: '3rd Spell Cost %',
+  spRaw3: '3rd Spell Cost Raw',
+  spPct4: '4th Spell Cost %',
+  spRaw4: '4th Spell Cost Raw',
+  sumSpPct: 'Sum Spell Cost %',
+  sumSpRaw: 'Sum Spell Cost Raw',
+};
+
 function formatNumericIdLabel(key: string): string {
-  const labels: Record<string, string> = {
-    hpBonus: 'HP Bonus',
-    hprRaw: 'HPR Raw',
-    hprPct: 'HPR %',
-    mr: 'Mana Regen',
-    ms: 'Mana Steal',
-    ls: 'Life Steal',
-    sdPct: 'Spell Damage %',
-    sdRaw: 'Spell Damage Raw',
-    mdPct: 'Melee Damage %',
-    mdRaw: 'Melee Damage Raw',
-    poison: 'Poison',
-    spd: 'Walk Speed',
-    atkTier: 'Attack Speed Bonus',
-    averageDps: 'Average DPS',
-    str: 'STR Bonus',
-    dex: 'DEX Bonus',
-    int: 'INT Bonus',
-    def: 'DEF Bonus',
-    agi: 'AGI Bonus',
-    strReq: 'STR Req',
-    dexReq: 'DEX Req',
-    intReq: 'INT Req',
-    defReq: 'DEF Req',
-    agiReq: 'AGI Req',
-    reqTotal: 'Req Total',
-    skillPointTotal: 'Skill Point Total',
-    offenseScore: 'Offense Score',
-    ehpProxy: 'EHP Proxy',
-    utilityScore: 'Utility Score',
-  };
-  return labels[key] ?? key;
+  return NUMERIC_ID_FULL_NAMES[key] ?? key;
 }
 
+const ZERO_WEIGHTS: AutoBuildConstraints['weights'] = {
+  legacyBaseDps: 0, legacyEhp: 0, dpsProxy: 0, spellProxy: 0, meleeProxy: 0,
+  ehpProxy: 0, speed: 0, sustain: 0, skillPointTotal: 0, reqTotalPenalty: 0,
+};
+
 function presetWeightDelta(preset: OptimizationPreset): AutoBuildConstraints['weights'] {
-  const base = { ...DEFAULT_AUTO_BUILD_CONSTRAINTS.weights };
   switch (preset) {
-    case 'damage':
-      return { ...base, legacyBaseDps: 2.4, legacyEhp: 0.25, dpsProxy: 2.2, ehpProxy: 0.2, speed: 0.5, sustain: 0.3 };
-    case 'tank':
-      return { ...base, legacyBaseDps: 0.45, legacyEhp: 2.2, dpsProxy: 0.4, ehpProxy: 1.8, speed: 0.2, sustain: 0.75 };
     case 'spell':
-      return { ...base, legacyBaseDps: 1.4, legacyEhp: 0.45, dpsProxy: 2.0, ehpProxy: 0.35, speed: 0.4, sustain: 1.0 };
+      return { ...ZERO_WEIGHTS, spellProxy: 2.0 };
     case 'melee':
-      return { ...base, legacyBaseDps: 1.8, legacyEhp: 0.55, dpsProxy: 1.7, ehpProxy: 0.45, speed: 0.8, sustain: 0.4 };
-    case 'speed':
-      return { ...base, legacyBaseDps: 0.8, legacyEhp: 0.5, dpsProxy: 0.9, ehpProxy: 0.45, speed: 2.0, sustain: 0.5 };
-    case 'sustain':
-      return { ...base, legacyBaseDps: 0.7, legacyEhp: 1.0, dpsProxy: 0.7, ehpProxy: 1.0, speed: 0.3, sustain: 2.0 };
+      return { ...ZERO_WEIGHTS, meleeProxy: 2.0 };
+    case 'mobility':
+      return { ...ZERO_WEIGHTS, speed: 2.0 };
+    case 'tank':
+      return { ...ZERO_WEIGHTS, legacyEhp: 2.0 };
     case 'constraints':
       return {
-        ...base,
+        ...ZERO_WEIGHTS,
         legacyBaseDps: 0.25,
         legacyEhp: 0.25,
         dpsProxy: 0.25,
+        spellProxy: 0.25,
+        meleeProxy: 0.25,
         ehpProxy: 0.25,
         speed: 0.25,
         sustain: 0.25,
         skillPointTotal: 0.25,
         reqTotalPenalty: 0.25,
       };
-    case 'balanced':
     default:
-      return base;
+      return { ...ZERO_WEIGHTS, spellProxy: 2.0 };
   }
 }
 
-function combinePresetWeights(primary: OptimizationPreset, secondary: OptimizationPreset | null): AutoBuildConstraints['weights'] {
-  const p = presetWeightDelta(primary);
-  if (!secondary || secondary === primary) return p;
-  const s = presetWeightDelta(secondary);
-  return {
-    legacyBaseDps: p.legacyBaseDps * 0.7 + s.legacyBaseDps * 0.3,
-    legacyEhp: p.legacyEhp * 0.7 + s.legacyEhp * 0.3,
-    dpsProxy: p.dpsProxy * 0.7 + s.dpsProxy * 0.3,
-    ehpProxy: p.ehpProxy * 0.7 + s.ehpProxy * 0.3,
-    speed: p.speed * 0.7 + s.speed * 0.3,
-    sustain: p.sustain * 0.7 + s.sustain * 0.3,
-    skillPointTotal: p.skillPointTotal * 0.7 + s.skillPointTotal * 0.3,
-    reqTotalPenalty: p.reqTotalPenalty * 0.7 + s.reqTotalPenalty * 0.3,
-  };
+function combinePresetWeights(primary: OptimizationPreset, _secondary: OptimizationPreset | null): AutoBuildConstraints['weights'] {
+  return presetWeightDelta(primary);
 }
 
 export function AutoBuilderModal(props: {
@@ -191,7 +205,6 @@ export function AutoBuilderModal(props: {
 
   const [customIdThresholds, setCustomIdThresholds] = useState<CustomIdThresholdRow[]>([]);
   const [primaryPreset, setPrimaryPreset] = useState<OptimizationPreset>('constraints');
-  const [secondaryPreset, setSecondaryPreset] = useState<OptimizationPreset | null>(null);
   const [builderCharacterClass, setBuilderCharacterClass] = useState<AutoBuildConstraints['characterClass']>(props.snapshot.characterClass);
   const [builderLevel, setBuilderLevel] = useState<number>(props.snapshot.level);
 
@@ -516,7 +529,7 @@ export function AutoBuilderModal(props: {
       onlyPinnedItems,
       useExhaustiveSmallPool,
       exhaustiveStateLimit: Math.max(1000, Math.min(5000000, exhaustiveStateLimit)),
-      weights: combinePresetWeights(primaryPreset, primaryPreset === 'constraints' ? null : secondaryPreset),
+      weights: combinePresetWeights(primaryPreset, null),
       topN: Math.max(1, Math.min(150, topN)),
       topKPerSlot: Math.max(10, Math.min(300, topKPerSlot)),
       beamWidth: Math.max(20, Math.min(5000, beamWidth)),
@@ -714,31 +727,13 @@ export function AutoBuilderModal(props: {
                     <ChipButton
                       key={preset}
                       active={primaryPreset === preset}
-                      onClick={() => {
-                        setPrimaryPreset(preset);
-                        if (preset === 'constraints') setSecondaryPreset(null);
-                      }}
+                      onClick={() => setPrimaryPreset(preset)}
                     >
                       {OPTIMIZATION_PRESET_LABELS[preset]}
                     </ChipButton>
                   ))}
                 </div>
               </div>
-              {primaryPreset !== 'constraints' ? (
-                <div>
-                  <FieldLabel>Secondary Goal (optional)</FieldLabel>
-                  <div className="flex flex-wrap gap-2">
-                    <ChipButton active={secondaryPreset === null} onClick={() => setSecondaryPreset(null)}>
-                      None
-                    </ChipButton>
-                    {SECONDARY_GOAL_OPTIONS.map((preset) => (
-                      <ChipButton key={preset} active={secondaryPreset === preset} onClick={() => setSecondaryPreset(preset)}>
-                        {OPTIMIZATION_PRESET_LABELS[preset]}
-                      </ChipButton>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
                 Build Solver always filters out builds that fail skill point/equip-order feasibility. You do not need to set a minimum SP total.
               </div>

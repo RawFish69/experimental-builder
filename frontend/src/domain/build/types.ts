@@ -29,6 +29,8 @@ export interface AggregatedBuildStats {
     spellRaw: number;
     meleePct: number;
     meleeRaw: number;
+    elemDamPct: number;   // eDamPct+tDamPct+wDamPct+fDamPct+aDamPct (elemental damage %)
+    genericDamPct: number; // damPct+rDamPct+nDamPct (generic damage %)
     offenseScore: number;
   };
 }
@@ -39,6 +41,8 @@ export interface BuildSummary {
   aggregated: AggregatedBuildStats;
   derived: {
     dpsProxy: number;
+    spellProxy: number; // spellPct*1.3 + spellRaw*0.12 (Legacy Builder spell damage inputs)
+    meleeProxy: number; // baseDps + meleePct*1.1 + meleeRaw*0.12 (Legacy Builder melee damage inputs)
     ehpProxy: number;
     reqTotal: number;
     skillPointTotal: number;
@@ -55,8 +59,16 @@ export interface ComparePreview {
   slot: ItemSlot | null;
 }
 
+export interface CraftedSlotInfo {
+  hash: string;
+  type: string;
+  category: string;
+  lvl: number;
+}
+
 export interface WorkbenchSnapshot {
   slots: Record<ItemSlot, number | null>;
+  craftedSlots: Partial<Record<ItemSlot, CraftedSlotInfo>>;
   binsByCategory: Record<ItemCategoryKey, number[]>;
   locks: Record<ItemSlot, boolean>;
   level: number;

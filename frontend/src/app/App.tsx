@@ -31,6 +31,7 @@ import type { WorkbenchSnapshot } from '@/domain/build/types';
 import { encodeWorkbenchSnapshot, parseAbilityTreeStateFromUrl, parseSearchStateFromUrl, parseWorkbenchPatchFromUrl, parseUrlState, writeUrlState } from '@/app/url-state';
 import { AutoBuilderModal } from '@/features/autobuilder/AutoBuilderModal';
 import { AbilityTreeModal } from '@/features/abilitytree/AbilityTreeModal';
+import { RecipeSolverModal } from '@/features/recipe-solver/RecipeSolverModal';
 import { abilityTreeCatalogService } from '@/domain/ability-tree/catalog-service';
 import { evaluateAbilityTree, getClassTree } from '@/domain/ability-tree/logic';
 import type { AbilityTreeDataset, AbilityTreeSelectionsByClass } from '@/domain/ability-tree/types';
@@ -72,9 +73,10 @@ function chooseEquipSlotForItem(
   return empty ?? candidates[0] ?? null;
 }
 
-function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'binsByCategory' | 'locks' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash'>): WorkbenchSnapshot {
+function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' | 'binsByCategory' | 'locks' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash'>): WorkbenchSnapshot {
   return {
     slots: { ...store.slots },
+    craftedSlots: { ...store.craftedSlots },
     binsByCategory: {
       helmet: [...store.binsByCategory.helmet],
       chestplate: [...store.binsByCategory.chestplate],
@@ -109,6 +111,7 @@ export function App() {
   const [searchClientReady, setSearchClientReady] = useState(false);
   const [autoBuilderOpen, setAutoBuilderOpen] = useState(initialParsed?.mode === 'autobuilder');
   const [abilityTreeOpen, setAbilityTreeOpen] = useState(initialParsed?.mode === 'abilitytree');
+  const [recipeSolverOpen, setRecipeSolverOpen] = useState(false);
   const [abilityTreeDataset, setAbilityTreeDataset] = useState<AbilityTreeDataset | null>(null);
   const [abilityTreeLoading, setAbilityTreeLoading] = useState(false);
   const [abilityTreeError, setAbilityTreeError] = useState<string | null>(null);
@@ -125,6 +128,7 @@ export function App() {
   const store = useWorkbenchStore(
     useShallow((state) => ({
       slots: state.slots,
+      craftedSlots: state.craftedSlots,
       binsByCategory: state.binsByCategory,
       locks: state.locks,
       level: state.level,
@@ -143,6 +147,8 @@ export function App() {
       clearCategory: state.clearCategory,
       clearAll: state.clearAll,
       equipItem: state.equipItem,
+      equipCraftedItem: state.equipCraftedItem,
+      clearCraftedSlot: state.clearCraftedSlot,
       moveSlotToBin: state.moveSlotToBin,
       swapSlots: state.swapSlots,
       assignDraggedItemToSlot: state.assignDraggedItemToSlot,
@@ -601,13 +607,24 @@ export function App() {
                 Ability Tree
               </Button>
               <Button
-                variant="ghost"
+                className="rounded-lg border border-amber-400/40 bg-amber-400/15 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-400/25"
                 onClick={() => {
                   setAbilityTreeOpen(false);
+                  setRecipeSolverOpen(false);
                   setAutoBuilderOpen(true);
                 }}
               >
                 Build Solver
+              </Button>
+              <Button
+                className="rounded-lg border border-violet-400/40 bg-violet-400/15 px-4 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-400/25"
+                onClick={() => {
+                  setAutoBuilderOpen(false);
+                  setAbilityTreeOpen(false);
+                  setRecipeSolverOpen(true);
+                }}
+              >
+                Recipe Solver
               </Button>
             </div>
           </div>
@@ -625,7 +642,6 @@ export function App() {
             onPin={handlePinFromSearch}
             onEquip={handleEquipFromSearch}
             onHover={(itemId, slot) => store.setComparePreview(itemId && slot ? { itemId, slot } : null)}
-            onOpenAutoBuilder={() => setAutoBuilderOpen(true)}
           />
 
           <WorkbenchBoard
@@ -656,13 +672,7 @@ export function App() {
                 : null
             }
             actions={{
-              onOpenAutoBuilder: () => {
-                setAbilityTreeOpen(false);
-                setAutoBuilderOpen(true);
-              },
-              onOpenAbilityTree: () => {
-                openAbilityTree();
-              },
+              onOpenAbilityTree: openAbilityTree,
               onCopyLegacyLink: () => void copyLegacyLink(),
               onOpenLegacyBuilder: openLegacyBuilder,
             }}
@@ -695,6 +705,15 @@ export function App() {
         inferredClass={inferredWeaponClass}
         selectionsByClass={abilityTreeSelectionsByClass}
         onSelectionsChange={setAbilityTreeSelectionsByClass}
+      />
+      <RecipeSolverModal
+        open={recipeSolverOpen}
+        onOpenChange={setRecipeSolverOpen}
+        onEquipCraft={(slot, info) => {
+          store.equipCraftedItem(slot, info);
+          setRecipeSolverOpen(false);
+          setStatusMessage(`Crafted ${info.type} equipped to ${slot}.`);
+        }}
       />
     </DndContext>
   );
