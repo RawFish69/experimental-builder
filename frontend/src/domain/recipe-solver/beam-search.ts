@@ -190,6 +190,8 @@ export function runRecipeSolverBeamSearch(args: RecipeSolverRunArgs): RecipeSolv
   const beamWidth = constraints.beamWidth;
   const totalSlots = 6;
   let processedStates = 0;
+  const mustIncludeSet = new Set(constraints.mustIncludeIngredients);
+  const mustIncludeBonus = mustIncludeSet.size > 0 ? 1e6 : 0; // Heavy bonus so must-include builds survive beam
 
   // Initialize beam with empty builds
   let beam: PartialBuild[] = [{ ingredientIds: [], score: 0 }];
@@ -205,9 +207,14 @@ export function runRecipeSolverBeamSearch(args: RecipeSolverRunArgs): RecipeSolv
         if (signal?.aborted) throw new DOMException('Recipe solver cancelled', 'AbortError');
 
         const newIds = [...partial.ingredientIds, ing.id];
-        const score = estimatePartialScore(
+        let score = estimatePartialScore(
           recipe, newIds, catalog, constraints, defaultMatTiers, defaultAtkSpd,
         );
+        // Bonus when all must-includes are present so they survive beam pruning
+        if (mustIncludeBonus > 0) {
+          const hasAll = mustIncludeSet.size > 0 && [...mustIncludeSet].every((id) => newIds.includes(id));
+          if (hasAll) score += mustIncludeBonus;
+        }
         nextBeam.push({ ingredientIds: newIds, score });
         processedStates++;
       }
@@ -300,10 +307,20 @@ export function runRecipeSolverBeamSearch(args: RecipeSolverRunArgs): RecipeSolv
     return true;
   }
 
+  function includesAllMustIngredients(ingredientIds: number[]): boolean {
+    if (mustIncludeSet.size === 0) return true;
+    const idSet = new Set(ingredientIds);
+    for (const id of mustIncludeSet) {
+      if (!idSet.has(id)) return false;
+    }
+    return true;
+  }
+
   for (const c of allCandidates) {
     if (seenHashes.has(c.hash)) continue;
     seenHashes.add(c.hash);
 
+    if (!includesAllMustIngredients(c.ingredientIds)) continue;
     if (!satisfiesMaxReqs(c.stats)) continue;
 
     if (hasThresholds && satisfiesThresholds(c.stats, constraints.target)) {
