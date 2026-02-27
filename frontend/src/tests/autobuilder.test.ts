@@ -22,6 +22,17 @@ describe('autobuilder beam search', () => {
     }
     return attackSpeedOrder[Math.max(0, Math.min(6, baseIndex + atkTier))];
   };
+  const totalAtkTier = (
+    result: ReturnType<typeof runAutoBuildBeamSearch>[number],
+    catalogRef: ReturnType<typeof makeTestCatalog>,
+  ) => {
+    let total = 0;
+    for (const slotId of Object.values(result.slots)) {
+      if (slotId == null) continue;
+      total += Math.round(catalogRef.itemsById.get(slotId)?.numeric.atkTier ?? 0);
+    }
+    return total;
+  };
 
   const catalog = makeTestCatalog([
     rawItem({ id: 1, name: 'Helm A', type: 'helmet', lvl: 100, hpBonus: 1000, sdPct: 10 }),
@@ -402,5 +413,268 @@ describe('autobuilder beam search', () => {
     expect(results.every((candidate) => finalAttackSpeed(candidate, catalog) === 'SUPER_FAST')).toBe(true);
     expect(results[0].slots.helmet).toBe(502);
     expect(results[0].slots.boots).toBe(503);
+  });
+
+  it('uses realistic SP feasibility modes only (no_tomes vs guild_rainbow +1 each)', () => {
+    const boundaryCatalog = makeTestCatalog([
+      rawItem({ id: 601, name: 'Boundary Helm 101', type: 'helmet', lvl: 100, strReq: 101 }),
+      rawItem({ id: 602, name: 'Chest', type: 'chestplate', lvl: 100 }),
+      rawItem({ id: 603, name: 'Legs', type: 'leggings', lvl: 100 }),
+      rawItem({ id: 604, name: 'Boots', type: 'boots', lvl: 100 }),
+      rawItem({ id: 605, name: 'Ring 1', type: 'ring', lvl: 100 }),
+      rawItem({ id: 606, name: 'Ring 2', type: 'ring', lvl: 100 }),
+      rawItem({ id: 607, name: 'Brace', type: 'bracelet', lvl: 100 }),
+      rawItem({ id: 608, name: 'Neck', type: 'necklace', lvl: 100 }),
+      rawItem({ id: 609, name: 'Weapon', type: 'wand', lvl: 100, classReq: 'Mage', averageDps: 1000 }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Mage';
+    base.level = 106;
+
+    const noTomesProgress: Array<{ phase: string; reasonCode?: string }> = [];
+    const noTomesResults = runAutoBuildBeamSearch({
+      catalog: boundaryCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        mustIncludeIds: [601],
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 120,
+        useExhaustiveSmallPool: false,
+        skillpointFeasibilityMode: 'no_tomes',
+      },
+      onProgress: (event) => noTomesProgress.push({ phase: event.phase, reasonCode: event.reasonCode }),
+    });
+
+    const guildResults = runAutoBuildBeamSearch({
+      catalog: boundaryCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        mustIncludeIds: [601],
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 120,
+        useExhaustiveSmallPool: false,
+        skillpointFeasibilityMode: 'guild_rainbow',
+      },
+    });
+
+    expect(noTomesResults.length).toBe(0);
+    expect(noTomesProgress.some((event) => event.reasonCode === 'sp_infeasible')).toBe(true);
+    expect(guildResults.length).toBeGreaterThan(0);
+    expect(guildResults.every((candidate) => Object.values(candidate.slots).includes(601))).toBe(true);
+
+    const beyondRainbowCatalog = makeTestCatalog([
+      rawItem({ id: 611, name: 'Boundary Helm 110', type: 'helmet', lvl: 100, strReq: 110 }),
+      rawItem({ id: 612, name: 'Chest', type: 'chestplate', lvl: 100 }),
+      rawItem({ id: 613, name: 'Legs', type: 'leggings', lvl: 100 }),
+      rawItem({ id: 614, name: 'Boots', type: 'boots', lvl: 100 }),
+      rawItem({ id: 615, name: 'Ring 1', type: 'ring', lvl: 100 }),
+      rawItem({ id: 616, name: 'Ring 2', type: 'ring', lvl: 100 }),
+      rawItem({ id: 617, name: 'Brace', type: 'bracelet', lvl: 100 }),
+      rawItem({ id: 618, name: 'Neck', type: 'necklace', lvl: 100 }),
+      rawItem({ id: 619, name: 'Weapon', type: 'wand', lvl: 100, classReq: 'Mage', averageDps: 1000 }),
+    ]);
+
+    const beyondRainbowResults = runAutoBuildBeamSearch({
+      catalog: beyondRainbowCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        mustIncludeIds: [611],
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 120,
+        useExhaustiveSmallPool: false,
+        skillpointFeasibilityMode: 'guild_rainbow',
+      },
+    });
+    expect(beyondRainbowResults.length).toBe(0);
+  });
+
+  it('applies attack target OR/AND semantics between atkTier range and final attack speed', () => {
+    const speedVsTierCatalog = makeTestCatalog([
+      rawItem({ id: 701, name: 'Helm', type: 'helmet', lvl: 100 }),
+      rawItem({ id: 702, name: 'Chest', type: 'chestplate', lvl: 100 }),
+      rawItem({ id: 703, name: 'Legs', type: 'leggings', lvl: 100 }),
+      rawItem({ id: 704, name: 'Boots', type: 'boots', lvl: 100 }),
+      rawItem({ id: 705, name: 'Ring 1', type: 'ring', lvl: 100 }),
+      rawItem({ id: 706, name: 'Ring 2', type: 'ring', lvl: 100 }),
+      rawItem({ id: 707, name: 'Brace', type: 'bracelet', lvl: 100 }),
+      rawItem({ id: 708, name: 'Neck', type: 'necklace', lvl: 100 }),
+      rawItem({
+        id: 709,
+        name: 'Already Super Fast Weapon',
+        type: 'wand',
+        lvl: 100,
+        classReq: 'Mage',
+        atkSpd: 'SUPER_FAST',
+        averageDps: 1000,
+      }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Mage';
+    base.level = 106;
+    base.slots.weapon = 709;
+    base.locks.weapon = true;
+
+    const orResults = runAutoBuildBeamSearch({
+      catalog: speedVsTierCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 120,
+        useExhaustiveSmallPool: false,
+        lockedSlots: { weapon: true },
+        attackSpeedConstraintMode: 'or',
+        weaponAttackSpeeds: ['SUPER_FAST'],
+        target: {
+          customNumericRanges: [{ key: 'atkTier', min: 6 }],
+        },
+      },
+    });
+
+    const andProgress: Array<{ reasonCode?: string }> = [];
+    const andResults = runAutoBuildBeamSearch({
+      catalog: speedVsTierCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 120,
+        useExhaustiveSmallPool: false,
+        lockedSlots: { weapon: true },
+        attackSpeedConstraintMode: 'and',
+        weaponAttackSpeeds: ['SUPER_FAST'],
+        target: {
+          customNumericRanges: [{ key: 'atkTier', min: 6 }],
+        },
+      },
+      onProgress: (event) => andProgress.push({ reasonCode: event.reasonCode }),
+    });
+
+    expect(orResults.length).toBeGreaterThan(0);
+    expect(orResults.every((candidate) => finalAttackSpeed(candidate, speedVsTierCatalog) === 'SUPER_FAST')).toBe(true);
+    expect(orResults.every((candidate) => totalAtkTier(candidate, speedVsTierCatalog) < 6)).toBe(true);
+    expect(andResults.length).toBe(0);
+    expect(
+      andProgress.some((event) => event.reasonCode === 'unsat_attack_target' || event.reasonCode === 'unsat_threshold'),
+    ).toBe(true);
+  });
+
+  it('satisfies must include/exclude and attack target constraints for Alkatraz + Warchief scenario', () => {
+    const scenarioCatalog = makeTestCatalog([
+      rawItem({
+        id: 800,
+        name: 'Alkatraz',
+        type: 'spear',
+        lvl: 100,
+        classReq: 'Warrior',
+        atkSpd: 'SLOW',
+        averageDps: 4100,
+      }),
+      rawItem({ id: 801, name: 'Warchief', type: 'ring', lvl: 100, atkTier: 1, sdPct: 25 }),
+      rawItem({ id: 802, name: 'Knucklebones', type: 'ring', lvl: 100, atkTier: 4, sdPct: 200 }),
+      rawItem({ id: 803, name: 'Necrosis', type: 'bracelet', lvl: 100, atkTier: 3, sdRaw: 250 }),
+      rawItem({ id: 804, name: 'Fast Helm', type: 'helmet', lvl: 100, atkTier: 2 }),
+      rawItem({ id: 805, name: 'Fast Chest', type: 'chestplate', lvl: 100, atkTier: 2 }),
+      rawItem({ id: 806, name: 'Fast Legs', type: 'leggings', lvl: 100, atkTier: 1 }),
+      rawItem({ id: 807, name: 'Fast Boots', type: 'boots', lvl: 100, atkTier: 1 }),
+      rawItem({ id: 808, name: 'Safe Ring', type: 'ring', lvl: 100 }),
+      rawItem({ id: 809, name: 'Safe Bracelet', type: 'bracelet', lvl: 100 }),
+      rawItem({ id: 810, name: 'Safe Necklace', type: 'necklace', lvl: 100 }),
+      rawItem({ id: 811, name: 'Tank Helm', type: 'helmet', lvl: 100, hpBonus: 5000, atkTier: -2 }),
+      rawItem({ id: 812, name: 'Tank Boots', type: 'boots', lvl: 100, hpBonus: 4500, atkTier: -2 }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Warrior';
+    base.level = 106;
+
+    const results = runAutoBuildBeamSearch({
+      catalog: scenarioCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Warrior' as const,
+        level: 106,
+        topN: 10,
+        topKPerSlot: 40,
+        beamWidth: 300,
+        mustIncludeIds: [800, 801],
+        excludedIds: [802, 803],
+        attackSpeedConstraintMode: 'or',
+        weaponAttackSpeeds: ['SUPER_FAST'],
+        target: {
+          customNumericRanges: [{ key: 'atkTier', min: 6 }],
+        },
+      },
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every((candidate) => Object.values(candidate.slots).includes(800))).toBe(true);
+    expect(results.every((candidate) => Object.values(candidate.slots).includes(801))).toBe(true);
+    expect(results.every((candidate) => !Object.values(candidate.slots).includes(802))).toBe(true);
+    expect(results.every((candidate) => !Object.values(candidate.slots).includes(803))).toBe(true);
+    expect(
+      results.every((candidate) => {
+        const speedOk = finalAttackSpeed(candidate, scenarioCatalog) === 'SUPER_FAST';
+        const tierOk = totalAtkTier(candidate, scenarioCatalog) >= 6;
+        return speedOk || tierOk;
+      }),
+    ).toBe(true);
+  });
+
+  it('fails fast with explicit diagnostics when must-includes conflict', () => {
+    const conflictCatalog = makeTestCatalog([
+      rawItem({ id: 901, name: 'Helmet One', type: 'helmet', lvl: 100 }),
+      rawItem({ id: 902, name: 'Helmet Two', type: 'helmet', lvl: 100 }),
+      rawItem({ id: 903, name: 'Chest', type: 'chestplate', lvl: 100 }),
+      rawItem({ id: 904, name: 'Legs', type: 'leggings', lvl: 100 }),
+      rawItem({ id: 905, name: 'Boots', type: 'boots', lvl: 100 }),
+      rawItem({ id: 906, name: 'Ring 1', type: 'ring', lvl: 100 }),
+      rawItem({ id: 907, name: 'Ring 2', type: 'ring', lvl: 100 }),
+      rawItem({ id: 908, name: 'Brace', type: 'bracelet', lvl: 100 }),
+      rawItem({ id: 909, name: 'Neck', type: 'necklace', lvl: 100 }),
+      rawItem({ id: 910, name: 'Weapon', type: 'wand', lvl: 100, classReq: 'Mage', averageDps: 1200 }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Mage';
+    base.level = 106;
+
+    const events: Array<{ phase: string; reasonCode?: string; detail?: string }> = [];
+    const results = runAutoBuildBeamSearch({
+      catalog: conflictCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        mustIncludeIds: [901, 902],
+      },
+      onProgress: (event) => events.push({ phase: event.phase, reasonCode: event.reasonCode, detail: event.detail }),
+    });
+
+    expect(results.length).toBe(0);
+    expect(events.some((event) => event.reasonCode === 'must_include_conflict')).toBe(true);
+    expect(events.find((event) => event.reasonCode === 'must_include_conflict')?.detail).toContain('No free');
   });
 });

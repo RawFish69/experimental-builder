@@ -184,7 +184,7 @@ function presetWeightDelta(preset: OptimizationPreset): AutoBuildConstraints['we
   }
 }
 
-function combinePresetWeights(primary: OptimizationPreset, _secondary: OptimizationPreset | null): AutoBuildConstraints['weights'] {
+function combinePresetWeights(primary: OptimizationPreset): AutoBuildConstraints['weights'] {
   return presetWeightDelta(primary);
 }
 
@@ -210,6 +210,10 @@ export function AutoBuilderModal(props: {
 
   const [allowedTiers, setAllowedTiers] = useState<string[]>([]);
   const [weaponAttackSpeeds, setWeaponAttackSpeeds] = useState<string[]>([]);
+  const [attackSpeedConstraintMode, setAttackSpeedConstraintMode] =
+    useState<AutoBuildConstraints['attackSpeedConstraintMode']>(DEFAULT_AUTO_BUILD_CONSTRAINTS.attackSpeedConstraintMode);
+  const [skillpointFeasibilityMode, setSkillpointFeasibilityMode] =
+    useState<AutoBuildConstraints['skillpointFeasibilityMode']>(DEFAULT_AUTO_BUILD_CONSTRAINTS.skillpointFeasibilityMode);
   const [minPowderSlots, setMinPowderSlots] = useState<number | null>(null);
   const [onlyPinnedItems, setOnlyPinnedItems] = useState(false);
 
@@ -227,8 +231,10 @@ export function AutoBuilderModal(props: {
   const [useExhaustiveSmallPool, setUseExhaustiveSmallPool] = useState(true);
   const [exhaustiveStateLimit, setExhaustiveStateLimit] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.exhaustiveStateLimit);
   const [lastDiagnostics, setLastDiagnostics] = useState<string | null>(null);
+  const [lastReasonCode, setLastReasonCode] = useState<string | null>(null);
   const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
   const diagnosticsRef = useRef<string | null>(null);
+  const reasonCodeRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   const hasAdvancedIdMinMax = customIdThresholds.some(
@@ -402,6 +408,10 @@ export function AutoBuilderModal(props: {
         signal: abortSignal,
         onProgress: (event) => {
           setProgressEvent(event);
+          if (event.phase === 'diagnostics' && event.reasonCode) {
+            reasonCodeRef.current = event.reasonCode;
+            setLastReasonCode(event.reasonCode);
+          }
           if (event.phase === 'diagnostics' && event.detail) {
             diagnosticsRef.current = event.detail;
             setLastDiagnostics(event.detail);
@@ -438,6 +448,10 @@ export function AutoBuilderModal(props: {
           signal: abortSignal,
           onProgress: (event) => {
             setProgressEvent(event);
+            if (event.phase === 'diagnostics' && event.reasonCode) {
+              reasonCodeRef.current = event.reasonCode;
+              setLastReasonCode(event.reasonCode);
+            }
             if (event.phase === 'diagnostics' && event.detail) {
               diagnosticsRef.current = event.detail;
               setLastDiagnostics(event.detail);
@@ -461,8 +475,10 @@ export function AutoBuilderModal(props: {
     setError(null);
     setResults([]);
     setLastDiagnostics(null);
+    setLastReasonCode(null);
     setProgressEvent(null);
     diagnosticsRef.current = null;
+    reasonCodeRef.current = null;
 
     const must = parseNameList(mustIncludeText, props.catalog);
     const excluded = parseNameList(excludeText, props.catalog);
@@ -525,11 +541,13 @@ export function AutoBuilderModal(props: {
       requiredMajorIds,
       excludedMajorIds,
       weaponAttackSpeeds: [...weaponAttackSpeeds],
+      attackSpeedConstraintMode,
+      skillpointFeasibilityMode,
       minPowderSlots,
       onlyPinnedItems,
       useExhaustiveSmallPool,
       exhaustiveStateLimit: Math.max(1000, Math.min(5000000, exhaustiveStateLimit)),
-      weights: combinePresetWeights(primaryPreset, null),
+      weights: combinePresetWeights(primaryPreset),
       topN: Math.max(1, Math.min(150, topN)),
       topKPerSlot: Math.max(10, Math.min(300, topKPerSlot)),
       beamWidth: Math.max(20, Math.min(5000, beamWidth)),
@@ -547,19 +565,53 @@ export function AutoBuilderModal(props: {
         setProgress('');
         setProgressEvent(null);
         const diag = diagnosticsRef.current ?? '';
+        const reasonCode = reasonCodeRef.current ?? lastReasonCode ?? '';
         const spInvalidMatch = /SP-invalid=(\d+)/i.exec(diag);
         const spInvalidCount = spInvalidMatch ? Number(spInvalidMatch[1]) : 0;
         const hardSpeedMatch = /hard=.*?\(speed=(\d+)/i.exec(diag);
         const hardSpeedCount = hardSpeedMatch ? Number(hardSpeedMatch[1]) : 0;
         const hardThresholdMatch = /hard=.*?\(speed=\d+,\s*thresholds=(\d+)/i.exec(diag);
         const hardThresholdCount = hardThresholdMatch ? Number(hardThresholdMatch[1]) : 0;
-        const tomeAssistFailed = /Tome-assisted final eval still found 0 valid builds/i.test(diag);
+        const reasonMessage =
+          reasonCode === 'must_include_conflict'
+            ? 'At least one must-include item cannot be placed under current locks/filters.'
+            : reasonCode === 'unsat_attack_target'
+            ? 'The configured attack target cannot be satisfied from the current candidate pool.'
+            : reasonCode === 'unsat_threshold'
+            ? 'One or more hard thresholds are mathematically unsatisfiable with the current pool.'
+            : reasonCode === 'sp_infeasible'
+            ? 'The explored builds failed skill-point/equip-order feasibility in the selected SP mode.'
+            : reasonCode === 'fallback_timeout'
+            ? 'Deterministic fallback timed out before finding a valid candidate.'
+            : reasonCode === 'empty_pool'
+            ? 'At least one slot has no eligible candidate items after filters.'
+            : reasonCode === 'search_pruned'
+            ? 'Search pruning/state limits exhausted viable branches before a valid candidate was found.'
+            : null;
+        const tipMessage =
+          reasonCode === 'must_include_conflict'
+            ? 'Tip: unlock conflicting slots, remove exclusions on required items, or relax class/level/tier filters.'
+            : reasonCode === 'unsat_attack_target'
+            ? 'Tip: switch attack logic to Either, lower atkTier minimum, or broaden candidate pools.'
+            : reasonCode === 'unsat_threshold'
+            ? 'Tip: lower strict min/max thresholds or reduce simultaneous hard constraints.'
+            : reasonCode === 'sp_infeasible'
+            ? skillpointFeasibilityMode === 'no_tomes'
+              ? 'Tip: try SP Feasibility Mode = Guild rainbow (+1 each), or add more low-requirement/support items.'
+              : 'Tip: relax hard constraints or lower requirement-heavy must-includes.'
+            : reasonCode === 'fallback_timeout'
+            ? 'Tip: increase Top K / Beam Width, disable pinned-only, or reduce hard filters.'
+            : reasonCode === 'empty_pool'
+            ? 'Tip: disable pinned-only first, then relax tier/powder/class filters.'
+            : reasonCode === 'search_pruned'
+            ? 'Tip: use Constraint-first/Exhaustive-ish strategy and increase search budgets.'
+            : null;
         setError(
           [
             'No valid candidates found.',
             diagnosticsRef.current ? `Diagnostics: ${diagnosticsRef.current}` : '',
-            tomeAssistFailed
-              ? 'Even after a tome-assisted feasibility retry, the explored candidate builds still failed skill-point/equip-order feasibility.'
+            reasonMessage
+              ? reasonMessage
               : spInvalidCount > 0
               ? 'The engine found many full builds, but they failed skill-point/equip-order feasibility. This is not just a UI filter issue.'
               : hardSpeedCount > 0
@@ -567,8 +619,8 @@ export function AutoBuilderModal(props: {
               : hardThresholdCount > 0 && customNumericRanges.length > 0
                 ? 'The engine found many full builds, but they failed advanced ID min/max thresholds. This usually means the search is not preserving enough support items for those IDs.'
               : 'This usually means your hard constraints are too strict (pinned-only, major IDs, must-includes, attack-speed, or thresholds), or the selected objective conflicts with them.',
-            tomeAssistFailed
-              ? 'This usually means the current search still is not surfacing enough requirement-support gear for the chosen weapon/goal combination. Try Exact Search + Deep Fallback, Balanced/Tank objective, and pin a few known requirement/attack-speed support items.'
+            tipMessage
+              ? tipMessage
               : spInvalidCount > 0
               ? 'Try switching Primary Goal to Balanced or Tank and keeping Exact Search + Deep Fallback enabled.'
               : hardSpeedCount > 0
@@ -966,6 +1018,48 @@ export function AutoBuilderModal(props: {
                 </div>
               </div>
 
+              <div>
+                <FieldLabel>Attack Target Logic</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  <ChipButton
+                    active={attackSpeedConstraintMode === 'or'}
+                    onClick={() => setAttackSpeedConstraintMode('or')}
+                  >
+                    Either
+                  </ChipButton>
+                  <ChipButton
+                    active={attackSpeedConstraintMode === 'and'}
+                    onClick={() => setAttackSpeedConstraintMode('and')}
+                  >
+                    Both
+                  </ChipButton>
+                </div>
+                <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                  Applies when both final attack speed and advanced `atkTier` thresholds are set.
+                </div>
+              </div>
+
+              <div>
+                <FieldLabel>SP Feasibility Mode</FieldLabel>
+                <div className="flex flex-wrap gap-2">
+                  <ChipButton
+                    active={skillpointFeasibilityMode === 'no_tomes'}
+                    onClick={() => setSkillpointFeasibilityMode('no_tomes')}
+                  >
+                    No tomes
+                  </ChipButton>
+                  <ChipButton
+                    active={skillpointFeasibilityMode === 'guild_rainbow'}
+                    onClick={() => setSkillpointFeasibilityMode('guild_rainbow')}
+                  >
+                    Guild rainbow (+1 each)
+                  </ChipButton>
+                </div>
+                <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                  Guild rainbow mode simulates legacy-compatible +1 STR/DEX/INT/DEF/AGI (total +5).
+                </div>
+              </div>
+
               <ChipButton active={onlyPinnedItems} onClick={() => setOnlyPinnedItems((prev) => !prev)}>
                 Only use pinned items in bins
               </ChipButton>
@@ -1069,6 +1163,8 @@ export function AutoBuilderModal(props: {
                 {solverStrategies.length > 0 && !(solverStrategies.length === 1 && solverStrategies[0] === 'auto')
                   ? ` | Strategy: ${solverStrategies.map((s) => SOLVER_STRATEGY_LABELS[s]).join(' → ')}.`
                   : ''}
+                {` | Attack logic: ${attackSpeedConstraintMode === 'or' ? 'Either' : 'Both'}.`}
+                {` | SP mode: ${skillpointFeasibilityMode === 'guild_rainbow' ? 'Guild rainbow (+1 each)' : 'No tomes'}.`}
                 {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ''}
                 {useExhaustiveSmallPool ? ` | Exact enumeration is used automatically when pool combinations are <= ${Math.round(exhaustiveStateLimit).toLocaleString()}.` : ''}
               </div>

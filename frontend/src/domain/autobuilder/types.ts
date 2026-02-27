@@ -42,6 +42,8 @@ export interface AutoBuildConstraints {
   requiredMajorIds: string[];
   excludedMajorIds: string[];
   weaponAttackSpeeds: string[];
+  attackSpeedConstraintMode: 'or' | 'and';
+  skillpointFeasibilityMode: 'no_tomes' | 'guild_rainbow';
   minPowderSlots: number | null;
   onlyPinnedItems: boolean;
   weights: AutoBuilderWeights;
@@ -82,6 +84,7 @@ export interface AutoBuildProgressEvent {
   totalSlots: number;
   expandedSlots: number;
   detail?: string;
+  reasonCode?: string;
 }
 
 export const DEFAULT_AUTO_BUILDER_WEIGHTS: AutoBuilderWeights = {
@@ -108,6 +111,8 @@ export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   requiredMajorIds: [],
   excludedMajorIds: [],
   weaponAttackSpeeds: [],
+  attackSpeedConstraintMode: 'or',
+  skillpointFeasibilityMode: 'no_tomes',
   minPowderSlots: null,
   onlyPinnedItems: false,
   weights: DEFAULT_AUTO_BUILDER_WEIGHTS,

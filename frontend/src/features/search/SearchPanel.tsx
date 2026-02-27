@@ -36,8 +36,8 @@ function toggleString(arr: string[], value: string): string[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-const ROW_HEIGHT_SIDEBAR = 88;
-const ROW_HEIGHT_BELOW = 84;
+const ROW_ESTIMATE_HEIGHT_SIDEBAR = 220;
+const ROW_ESTIMATE_HEIGHT_BELOW = 200;
 const PAGE_SIZE = 50;
 
 function SearchResultItem(props: {
@@ -64,7 +64,7 @@ function SearchResultItem(props: {
         item={item}
         compact
         dense
-        showDetails
+        showDetails={false}
         dragData={{ kind: 'search', itemId: item.id }}
         onPin={() => props.onPin(item.id)}
         onEquip={() => props.onEquip(item.id)}
@@ -117,12 +117,14 @@ export function SearchResultList(props: {
 
   const isSidebar = !props.state.resultsBelowBuild;
   const itemsPerRow = isSidebar ? 1 : 3;
-  const rowHeight = isSidebar ? ROW_HEIGHT_SIDEBAR : ROW_HEIGHT_BELOW;
+  const rowHeightEstimate = isSidebar ? ROW_ESTIMATE_HEIGHT_SIDEBAR : ROW_ESTIMATE_HEIGHT_BELOW;
   const rowCount = Math.ceil(pageRows.length / itemsPerRow);
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => rowHeight,
+    estimateSize: () => rowHeightEstimate,
+    // Search rows contain variable-height cards; measure actual height to avoid overlap.
+    measureElement: (el) => el.getBoundingClientRect().height,
     overscan: 4,
   });
 
@@ -200,6 +202,8 @@ export function SearchResultList(props: {
             return (
               <div
                 key={virtualRow.key}
+                data-index={virtualRow.index}
+                ref={virtualizer.measureElement}
                 style={{
                   position: 'absolute',
                   top: 0,
