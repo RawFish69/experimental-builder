@@ -55,12 +55,10 @@ function buildIngredientPool(
     if (ing.id === NO_INGREDIENT_ID) continue;
     if (excludedSet.has(ing.id)) continue;
 
-    const isMustInclude = mustIncludeSet.has(ing.id);
-    if (!isMustInclude) {
-      const hasSkill = ing.skills.some(s => s.toUpperCase() === skill);
-      if (!hasSkill) continue;
-      if (ing.lvl > maxLevel) continue;
-    }
+    // All ingredients must match the recipe's profession (including must-includes)
+    const hasSkill = ing.skills.some(s => s.toUpperCase() === skill);
+    if (!hasSkill) continue;
+    if (ing.lvl > maxLevel) continue;
 
     eligible.push(ing);
   }

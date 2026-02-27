@@ -203,6 +203,21 @@ export function RecipeSolverModal(props: {
       return;
     }
 
+    const skill = (RECIPE_TYPE_TO_SKILL[recipeType] ?? '').toUpperCase();
+    const mismatched: string[] = [];
+    for (const id of must.ids) {
+      const ing = catalog.ingredientsById.get(id);
+      if (ing && !ing.skills.some(s => s.toUpperCase() === skill)) {
+        mismatched.push(ing.displayName || ing.name);
+      }
+    }
+    if (mismatched.length > 0) {
+      setError(
+        `${mismatched.join(', ')} cannot be used for ${recipeType} (${skill}) – they require a different profession.`,
+      );
+      return;
+    }
+
     const target: Record<string, { min?: number; max?: number }> = {};
     for (const row of thresholds) {
       if (!row.key) continue;
