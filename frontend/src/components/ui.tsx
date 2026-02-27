@@ -75,7 +75,7 @@ export function ChipButton(
 export function KpiTile(props: { label: string; value: string | number; delta?: number | null; className?: string; valueClassName?: string }) {
   const delta = props.delta;
   const deltaClass =
-    delta == null ? '' : delta > 0 ? 'text-emerald-300' : delta < 0 ? 'text-rose-300' : 'text-slate-300';
+    delta == null ? '' : delta > 0 ? 'wb-text-success' : delta < 0 ? 'wb-text-danger' : 'text-[var(--wb-muted)]';
   return (
     <div className={cn('wb-card p-3', props.className)}>
       <div className="text-[11px] uppercase tracking-wide text-[var(--wb-muted)]">{props.label}</div>
@@ -98,10 +98,10 @@ export function Modal(props: PropsWithChildren<{ open: boolean; onOpenChange(ope
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+        <Dialog.Overlay className="fixed inset-0 z-40 backdrop-blur-sm" style={{ background: 'var(--wb-overlay)' }} />
         <Dialog.Content
           className={cn(
-            'fixed left-1/2 top-1/2 z-50 w-[min(95vw,1100px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-[var(--wb-border)] bg-[#0d1325] shadow-2xl',
+            'wb-panel fixed left-1/2 top-1/2 z-50 w-[min(95vw,1100px)] -translate-x-1/2 -translate-y-1/2 rounded-2xl shadow-2xl',
             props.className,
           )}
         >
@@ -115,7 +115,7 @@ export function Modal(props: PropsWithChildren<{ open: boolean; onOpenChange(ope
               ) : null}
             </div>
             <Dialog.Close asChild>
-              <button className="rounded-lg border border-[var(--wb-border)] p-2 hover:bg-white/5" aria-label="Close">
+              <button className="wb-icon-button" aria-label="Close">
                 <X size={16} />
               </button>
             </Dialog.Close>
@@ -156,4 +156,3 @@ export function NumberField(props: {
     </div>
   );
 }
-

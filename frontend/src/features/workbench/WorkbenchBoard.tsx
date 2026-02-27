@@ -13,13 +13,13 @@ import { ItemCard } from '@/features/workbench/ItemCard';
 function CraftedSlotCard(props: { info: CraftedSlotInfo; onClear: () => void }) {
   const { info } = props;
   return (
-    <div className="rounded-lg border border-violet-400/40 bg-violet-400/8 px-3 py-2">
+    <div className="wb-banner px-3 py-2" data-tone="accent">
       <div className="flex items-center justify-between gap-2">
         <div>
-          <div className="text-xs font-semibold text-violet-100">
+          <div className="text-xs font-semibold">
             Crafted {info.type.charAt(0).toUpperCase() + info.type.slice(1)}
           </div>
-          <div className="mt-0.5 text-[10px] text-violet-200/60">
+          <div className="mt-0.5 text-[10px] text-[var(--wb-muted)]">
             Lv. {info.lvl} | {info.hash.slice(0, 20)}...
           </div>
         </div>
@@ -54,7 +54,7 @@ function SlotCard(props: {
       ref={setNodeRef}
       className={cn(
         'rounded-xl border p-2',
-        isOver ? 'border-emerald-400/70 bg-emerald-400/8' : 'border-[var(--wb-border-muted)] bg-black/15',
+        isOver ? 'border-emerald-400/70 bg-emerald-400/8' : 'wb-surface-strong',
       )}
       onMouseEnter={() => props.store.setSelectedSlot(props.slot)}
     >
@@ -62,7 +62,7 @@ function SlotCard(props: {
         <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">{slotLabel(props.slot)}</div>
         <div className="flex items-center gap-1">
           <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => props.store.toggleLock(props.slot)} title="Lock slot">
-            <Lock size={12} className={cn(props.store.locks[props.slot] && 'text-emerald-300')} />
+            <Lock size={12} className={cn(props.store.locks[props.slot] && 'wb-text-success')} />
           </Button>
           <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => props.store.moveSlotToBin(props.slot)} title="Move to bin">
             <Undo2 size={12} />
@@ -92,7 +92,7 @@ function SlotCard(props: {
       ) : craftedInfo ? (
         <CraftedSlotCard info={craftedInfo} onClear={() => props.store.clearCraftedSlot(props.slot)} />
       ) : (
-        <div className="rounded-lg border border-dashed border-[var(--wb-border)] px-3 py-3 text-center text-xs text-[var(--wb-muted)]">
+        <div className="wb-placeholder rounded-lg px-3 py-3 text-center text-xs">
           Drop a {slotToCategory(props.slot)} item here
         </div>
       )}
@@ -131,7 +131,7 @@ function BinColumn(props: {
         ref={setNodeRef}
         className={cn(
           'wb-grid-backdrop min-h-20 rounded-xl border p-1.5',
-          isOver ? 'border-emerald-400/70 bg-emerald-400/8' : 'border-[var(--wb-border-muted)] bg-black/10',
+          isOver ? 'border-emerald-400/70 bg-emerald-400/8' : 'wb-surface',
         )}
       >
         {items.length === 0 ? (
@@ -252,7 +252,7 @@ export function WorkbenchBoard(props: {
               showItemDetails={showItemDetails}
               onHoverItem={props.onHoverItem}
             />
-            <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
+            <div className="wb-surface rounded-xl p-2">
               <div className="mb-1.5 flex items-center justify-between gap-2">
                 <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Weapon Shelf</div>
                 <div className="text-[11px] text-[var(--wb-muted)]">Pinned weapon candidates</div>
@@ -305,12 +305,12 @@ export function WorkbenchBoard(props: {
         </ScrollArea>
 
         {props.searchResults ? (
-          <div className="flex min-h-[220px] max-h-[40vh] min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--wb-border-muted)] bg-black/10">
+          <div className="wb-surface flex min-h-[220px] max-h-[40vh] min-w-0 flex-col overflow-hidden rounded-xl">
             {props.searchResults}
           </div>
         ) : null}
 
-        <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
+        <div className="wb-surface rounded-xl p-2">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <Button variant="ghost" className="justify-start" onClick={props.onShareWorkbench}>
               <Link2 size={14} className="mr-2" />

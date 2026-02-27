@@ -13,6 +13,7 @@ import {
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useShallow } from 'zustand/react/shallow';
 import { Hammer, Link2, TreePine } from 'lucide-react';
+import { applyThemeMode, persistThemeMode, readStoredThemeMode, type ThemeMode } from '@/app/theme-mode';
 import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { getClassFromWeaponType, ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
@@ -121,6 +122,7 @@ export function App() {
   const [abilityTreeVersionHint, setAbilityTreeVersionHint] = useState<string | null>(initialParsed?.abilityTree?.version ?? null);
   const [statusMessage, setStatusMessage] = useState<string>('');
   const [searchTrigger, setSearchTrigger] = useState(0);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
 
   const searchClientRef = useRef<SearchWorkerClient | null>(null);
   const searchTimerRef = useRef<number | null>(null);
@@ -166,6 +168,11 @@ export function App() {
   );
 
   const snapshot = useMemo(() => snapshotFromStore(store), [store]);
+
+  useEffect(() => {
+    applyThemeMode(themeMode);
+    persistThemeMode(themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     if (initialParsed?.workbenchPatch) {
@@ -529,9 +536,21 @@ export function App() {
     setAbilityTreeOpen(true);
   };
 
+  const openAutoBuilder = () => {
+    setAbilityTreeOpen(false);
+    setRecipeSolverOpen(false);
+    setAutoBuilderOpen(true);
+  };
+
+  const openRecipeSolver = () => {
+    setAutoBuilderOpen(false);
+    setAbilityTreeOpen(false);
+    setRecipeSolverOpen(true);
+  };
+
   if (catalogError) {
     return (
-      <div className="flex min-h-full items-center justify-center p-6">
+      <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
         <div className="wb-panel max-w-xl rounded-2xl p-6">
           <div className="text-xl font-semibold">Failed to load</div>
           <div className="mt-2 text-sm text-[var(--wb-muted)]">{catalogError}</div>
@@ -542,7 +561,7 @@ export function App() {
 
   if (!catalog || !summary) {
     return (
-      <div className="flex min-h-full items-center justify-center p-6">
+      <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
         <div className="wb-panel max-w-xl rounded-2xl p-6">
           <div className="text-xl font-semibold">Loading...</div>
           <div className="mt-2 text-sm text-[var(--wb-muted)]">Preparing item catalog, search index, and build state.</div>
@@ -553,15 +572,28 @@ export function App() {
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-      <div className="flex min-h-full flex-col gap-3 p-3 lg:p-4">
+      <div className="wb-app-shell flex min-h-screen flex-col gap-3 p-3 lg:p-4">
         <header className="wb-panel wb-hero rounded-2xl px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 flex-1 flex-col gap-1">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="wb-chip border-cyan-300/30 bg-cyan-300/8 text-cyan-100">Standalone Alpha</span>
+                <div className="wb-theme-toggle">
+                  <span className="wb-theme-toggle-label">Theme</span>
+                  {(['minimal', 'classic'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      className="wb-theme-toggle-button"
+                      data-active={themeMode === mode ? 'true' : 'false'}
+                      onClick={() => setThemeMode(mode)}
+                    >
+                      {mode === 'minimal' ? 'Minimal' : 'Classic'}
+                    </button>
+                  ))}
+                </div>
                 <span className="wb-chip">Legacy-compatible imports</span>
                 {abilityTreeEvaluation ? (
-                  <span className="wb-chip border-emerald-300/30 bg-emerald-300/8 text-emerald-100">
+                  <span className="wb-chip" data-tone="success">
                     Ability Tree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
                   </span>
                 ) : null}
@@ -573,15 +605,11 @@ export function App() {
 
             <button
               type="button"
-              className="build-solver-logo-btn order-first flex shrink-0 cursor-pointer items-center justify-center gap-2 self-center rounded-xl px-6 py-3 text-lg font-bold tracking-tight text-cyan-50 shadow-lg sm:px-8 sm:py-4 sm:text-xl lg:order-none"
-              onClick={() => {
-                setAbilityTreeOpen(false);
-                setRecipeSolverOpen(false);
-                setAutoBuilderOpen(true);
-              }}
-              title="Open Build Solver – beam search over item combinations"
+              className="build-solver-logo-btn order-first flex shrink-0 cursor-pointer items-center justify-center gap-2 self-center rounded-xl px-6 py-3 text-lg font-bold tracking-tight shadow-lg sm:px-8 sm:py-4 sm:text-xl lg:order-none"
+              onClick={openAutoBuilder}
+              title="Open Build Solver for automated build search"
             >
-              <Hammer size={28} className="text-amber-200/90" strokeWidth={2.5} />
+              <Hammer size={28} style={{ color: 'var(--wb-brand-icon)' }} strokeWidth={2.5} />
               Build Solver
             </button>
 
@@ -616,26 +644,16 @@ export function App() {
                 <Link2 size={13} className="mr-1 inline" />
                 Share Session
               </Button>
-              <Button
-                variant="ghost"
-                onClick={openAbilityTree}
-              >
+              <Button variant="ghost" onClick={openAbilityTree}>
                 <TreePine size={13} className="mr-1 inline" />
                 Ability Tree
               </Button>
-              <Button
-                className="rounded-lg border border-violet-400/40 bg-violet-400/15 px-4 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-400/25"
-                onClick={() => {
-                  setAutoBuilderOpen(false);
-                  setAbilityTreeOpen(false);
-                  setRecipeSolverOpen(true);
-                }}
-              >
+              <Button variant="primary" onClick={openRecipeSolver}>
                 Recipe Solver
               </Button>
             </div>
           </div>
-          {statusMessage ? <div className="mt-2 text-xs text-emerald-200">{statusMessage}</div> : null}
+          {statusMessage ? <div className="mt-3 text-xs wb-text-success">{statusMessage}</div> : null}
         </header>
 
         <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px]">

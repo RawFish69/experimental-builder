@@ -11,7 +11,7 @@ A web app for building and optimizing Wynncraft character loadouts using the Wor
 
 ### New Workbench + Build Solver app
 - `frontend/` - source code (React + TypeScript + Vite)
-- `workbench/` - built static output for `/workbench/`
+- `dist/` - built static output for the site root `/`
 
 ### Data (legacy + workbench)
 - `compress.json` - main item database
@@ -33,7 +33,7 @@ npm.cmd run dev
 ```
 
 Open:
-- `http://localhost:5173/workbench/`
+- `http://localhost:5173/`
 
 In the Workbench UI, the old "Auto Builder / Optimizer" flow is now called `Build Solver`.
 

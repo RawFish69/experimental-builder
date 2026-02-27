@@ -150,7 +150,7 @@ export function SearchResultList(props: {
                 <>
                   <button
                     type="button"
-                    className="mr-1 rounded px-1.5 py-0.5 hover:bg-white/10 disabled:opacity-40"
+                    className="wb-inline-button mr-1"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={clampedPage <= 0}
                     title="Previous page"
@@ -160,7 +160,7 @@ export function SearchResultList(props: {
                   <span>{(startItem).toLocaleString()}–{endItem.toLocaleString()}</span>
                   <button
                     type="button"
-                    className="ml-1 rounded px-1.5 py-0.5 hover:bg-white/10 disabled:opacity-40"
+                    className="wb-inline-button ml-1"
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={clampedPage >= totalPages - 1}
                     title="Next page"
@@ -182,7 +182,7 @@ export function SearchResultList(props: {
       <div
         ref={parentRef}
         className={cn(
-          'wb-scrollbar overflow-auto rounded-xl border border-[var(--wb-border-muted)] bg-black/10',
+          'wb-scrollbar wb-surface overflow-auto rounded-xl',
           props.embedded ? 'min-h-[160px] flex-1' : 'h-[calc(100vh-26rem)]',
         )}
       >
@@ -723,7 +723,7 @@ export function SearchPanel(props: {
                 <div key={preset.name} className="flex items-center gap-1">
                   <ChipButton onClick={() => props.setState(preset.state)}>{preset.name}</ChipButton>
                   <button
-                    className="rounded-md border border-[var(--wb-border)] px-1.5 py-0.5 text-xs text-[var(--wb-muted)] hover:bg-white/5"
+                    className="wb-inline-button border border-[var(--wb-border)] px-1.5 py-0.5 text-xs"
                     onClick={() => setPresets((prev) => prev.filter((x) => x.name !== preset.name))}
                     title={`Delete ${preset.name}`}
                   >

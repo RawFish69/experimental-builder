@@ -101,20 +101,13 @@ export function BuildSummaryPanel(props: {
             <ItemCard item={focusedItem.item} compact dense showDetails={showFocusedItemDetails} />
           </div>
         ) : (
-          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-[var(--wb-muted)]">
+          <div className="wb-surface rounded-xl p-3 text-xs text-[var(--wb-muted)]">
             Select or hover an item to inspect it here.
           </div>
         )}
 
         {props.abilityTreeSummary ? (
-          <div
-            className={[
-              'rounded-xl border p-3 text-xs',
-              props.abilityTreeSummary.hasErrors
-                ? 'border-amber-400/30 bg-amber-400/8 text-amber-100'
-                : 'border-emerald-400/20 bg-emerald-400/8 text-emerald-100',
-            ].join(' ')}
-          >
+          <div className="wb-banner p-3 text-xs" data-tone={props.abilityTreeSummary.hasErrors ? 'warning' : 'success'}>
             <div className="mb-1 flex items-center justify-between gap-2">
               <div className="font-semibold">Ability Tree ({props.abilityTreeSummary.className})</div>
               <Button variant="ghost" className="px-2 py-1 text-xs" onClick={props.actions.onOpenAbilityTree}>
@@ -131,9 +124,9 @@ export function BuildSummaryPanel(props: {
         <div className="wb-card p-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Melee DPS</div>
           <div className="mt-1 flex items-end justify-between gap-2">
-            <div className="text-xl font-semibold text-amber-200">{fmt(meleePreview?.dps ?? props.summary.derived.legacyBaseDps)}</div>
+            <div className="wb-text-offense text-xl font-semibold">{fmt(meleePreview?.dps ?? props.summary.derived.legacyBaseDps)}</div>
             {delta?.legacyBaseDps != null ? (
-              <div className={['text-xs', delta.legacyBaseDps > 0 ? 'text-emerald-300' : delta.legacyBaseDps < 0 ? 'text-rose-300' : 'text-[var(--wb-muted)]'].join(' ')}>
+              <div className={['text-xs', delta.legacyBaseDps > 0 ? 'wb-text-success' : delta.legacyBaseDps < 0 ? 'wb-text-danger' : 'text-[var(--wb-muted)]'].join(' ')}>
                 {delta.legacyBaseDps > 0 ? '+' : ''}
                 {Math.round(delta.legacyBaseDps).toLocaleString()}
               </div>
@@ -143,7 +136,7 @@ export function BuildSummaryPanel(props: {
             {meleePreview
               ? `Legacy melee DPS (${meleePreview.attackSpeedTier}) • Per Attack ${fmt(meleePreview.perAttackAverage)}`
               : 'Legacy melee DPS preview unavailable (equip a weapon and valid ability tree selection).'}{' '}
-            • Melee % / Raw <span className="text-amber-200/90">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="text-amber-200/90">{fmt(props.summary.aggregated.offense.meleeRaw)}</span>
+            • Melee % / Raw <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleeRaw)}</span>
           </div>
         </div>
 
@@ -154,7 +147,7 @@ export function BuildSummaryPanel(props: {
               <div className="text-xs text-[var(--wb-muted)]">{props.spellPreview.spells.length} entries</div>
             </div>
             {props.spellPreview.notes.length > 0 ? (
-              <div className="mb-2 rounded-lg border border-amber-400/20 bg-amber-400/5 p-2 text-xs text-amber-100">
+              <div className="wb-banner mb-2 p-2 text-xs" data-tone="warning">
                 {props.spellPreview.notes.join(' ')}
               </div>
             ) : null}
@@ -166,14 +159,14 @@ export function BuildSummaryPanel(props: {
               <ScrollArea className="max-h-[36vh] lg:max-h-[44vh]">
                 <div className="grid gap-2 pr-1">
                   {props.spellPreview.spells.map((spell) => (
-                    <div key={`${spell.baseSpell}-${spell.name}`} className="rounded-lg border border-[var(--wb-border-muted)] bg-black/10 p-2">
+                    <div key={`${spell.baseSpell}-${spell.name}`} className="wb-surface rounded-lg p-2">
                       <div className="flex items-center justify-between gap-2 text-xs">
                         <div className="font-semibold">
                           {spell.name}
                           <span className="ml-1 text-[var(--wb-muted)]">({spell.displayPartName})</span>
                         </div>
                         <div className="text-right">
-                          <div className={spell.isHealing ? 'text-emerald-200' : 'text-amber-200'}>
+                          <div className={spell.isHealing ? 'wb-text-defense' : 'wb-text-offense'}>
                             {Math.round(spell.averageDisplayValue).toLocaleString()} {spell.isHealing ? 'heal' : 'avg dmg'}
                           </div>
                           {spell.manaCost != null ? (
@@ -187,7 +180,7 @@ export function BuildSummaryPanel(props: {
                           .map((part) => (
                             <div key={part.name} className="flex items-center justify-between gap-2">
                               <span className="truncate">{part.name}</span>
-                              <span className={part.type === 'heal' ? 'text-emerald-200' : 'text-amber-200'}>
+                              <span className={part.type === 'heal' ? 'wb-text-defense' : 'wb-text-offense'}>
                                 {Math.round(part.averageTotal ?? 0).toLocaleString()}
                               </span>
                             </div>
@@ -202,27 +195,27 @@ export function BuildSummaryPanel(props: {
         ) : null}
 
         <div className="grid grid-cols-2 gap-2">
-          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} valueClassName="text-amber-200" />
-          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} valueClassName="text-emerald-200" />
+          <KpiTile label="Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} delta={delta?.legacyBaseDps ?? null} valueClassName="wb-text-offense" />
+          <KpiTile label="Effective HP" value={fmt(props.summary.derived.legacyEhp)} delta={delta?.legacyEhp ?? null} valueClassName="wb-text-defense" />
           <KpiTile label="Req Total" value={fmt(props.summary.derived.reqTotal)} />
           <KpiTile label="SP Total" value={fmt(props.summary.derived.skillPointTotal)} delta={delta?.skillPointTotal ?? null} />
         </div>
 
         <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
+          <div className="wb-surface rounded-xl px-3 py-2">
             <span className="text-[var(--wb-muted)]">SP Feasibility:</span>{' '}
-            <span className={props.summary.derived.skillpointFeasible ? 'text-emerald-200' : 'text-rose-200'}>
+            <span className={props.summary.derived.skillpointFeasible ? 'wb-text-success' : 'wb-text-danger'}>
               {props.summary.derived.skillpointFeasible ? 'Wearable' : 'Invalid / Not Wearable'}
             </span>
           </div>
-          <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 px-3 py-2">
+          <div className="wb-surface rounded-xl px-3 py-2">
             <span className="text-[var(--wb-muted)]">Assigned SP Needed:</span>{' '}
             <span>{fmt(props.summary.derived.assignedSkillPointsRequired)}</span>
           </div>
         </div>
 
         {props.compareSummary && props.compareSlot ? (
-          <div className="rounded-xl border border-emerald-400/30 bg-emerald-400/8 p-3 text-xs text-emerald-100">
+          <div className="wb-banner p-3 text-xs" data-tone="success">
             Compare preview for <b>{slotLabel(props.compareSlot)}</b>
           </div>
         ) : null}
@@ -231,39 +224,39 @@ export function BuildSummaryPanel(props: {
           <div className="wb-card p-3">
             <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Offense</div>
             <div className="mt-2 grid gap-1 text-xs">
-              <div><span className="text-[var(--wb-muted)]">Legacy Base DPS:</span> <span className="font-medium text-amber-200">{fmt(props.summary.derived.legacyBaseDps)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">Heuristic DPS Proxy:</span> <span className="text-amber-200/90">{fmt(props.summary.derived.dpsProxy)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">Spell % / Raw:</span> <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.spellPct)}</span> / <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.spellRaw)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">Melee % / Raw:</span> <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="text-amber-200/80">{fmt(props.summary.aggregated.offense.meleeRaw)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Legacy Base DPS:</span> <span className="wb-text-offense font-medium">{fmt(props.summary.derived.legacyBaseDps)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Heuristic DPS Proxy:</span> <span className="wb-text-offense">{fmt(props.summary.derived.dpsProxy)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Spell % / Raw:</span> <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.spellPct)}</span> / <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.spellRaw)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Melee % / Raw:</span> <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleeRaw)}</span></div>
             </div>
           </div>
           <div className="wb-card p-3">
             <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Defense & Utility</div>
             <div className="mt-2 grid gap-1 text-xs">
-              <div><span className="text-[var(--wb-muted)]">Legacy EHP (AGI):</span> <span className="font-medium text-emerald-200">{fmt(props.summary.derived.legacyEhp)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">Legacy EHP (No AGI):</span> <span className="text-emerald-200/90">{fmt(props.summary.derived.legacyEhpNoAgi)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">Heuristic EHP Proxy:</span> <span className="text-emerald-200/80">{fmt(props.summary.derived.ehpProxy)}</span></div>
-              <div><span className="text-[var(--wb-muted)]">HP Total:</span> <span className="text-emerald-100/80">{fmt(props.summary.aggregated.hpTotal)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Legacy EHP (AGI):</span> <span className="wb-text-defense font-medium">{fmt(props.summary.derived.legacyEhp)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Legacy EHP (No AGI):</span> <span className="wb-text-defense">{fmt(props.summary.derived.legacyEhpNoAgi)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">Heuristic EHP Proxy:</span> <span className="wb-text-defense">{fmt(props.summary.derived.ehpProxy)}</span></div>
+              <div><span className="text-[var(--wb-muted)]">HP Total:</span> <span className="wb-text-defense">{fmt(props.summary.aggregated.hpTotal)}</span></div>
               <div><span className="text-[var(--wb-muted)]">HPR Total:</span> {fmt(props.summary.aggregated.hprTotal)}</div>
               <div><span className="text-[var(--wb-muted)]">MR / MS / LS:</span> {fmt(props.summary.aggregated.mr)} / {fmt(props.summary.aggregated.ms)} / {fmt(props.summary.aggregated.ls)}</div>
               <div><span className="text-[var(--wb-muted)]">Walk Speed:</span> {fmt(props.summary.aggregated.speed)}</div>
             </div>
           </div>
         </div>
-        <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-[var(--wb-muted)]">
+        <div className="wb-surface rounded-xl p-3 text-xs text-[var(--wb-muted)]">
           Workbench primary KPIs use legacy-compatible metrics (Base DPS + Effective HP). Ability tree editing is now in Workbench, but these summary metrics still exclude ability-tree effects for now. Proxy values are still used internally for search/Build Solver heuristics.
         </div>
         <div className="grid gap-2">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Warnings</div>
           {props.summary.warnings.messages.length === 0 ? (
-            <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3 text-xs text-emerald-200">
+            <div className="wb-surface rounded-xl p-3 text-xs wb-text-success">
               No active warnings.
             </div>
           ) : (
             <ScrollArea className="max-h-32">
               <div className="grid gap-2">
                 {props.summary.warnings.messages.map((warning, index) => (
-                  <div key={`${warning}-${index}`} className="rounded-xl border border-amber-400/30 bg-amber-400/8 p-2 text-xs text-amber-100">
+                  <div key={`${warning}-${index}`} className="wb-banner p-2 text-xs" data-tone="warning">
                     {warning}
                   </div>
                 ))}

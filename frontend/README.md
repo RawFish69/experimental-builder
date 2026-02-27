@@ -1,6 +1,6 @@
 # Workbench Frontend
 
-React + TypeScript + Vite app for the `/workbench/` route.
+React + TypeScript + Vite app for the site root `/`.
 
 The Workbench includes the build generation feature now named `Build Solver`.
 
@@ -12,12 +12,12 @@ npm.cmd install
 npm.cmd run dev
 ```
 
-Open `http://localhost:5173/workbench/`.
+Open `http://localhost:5173/`.
 
 ## Commands
 
 - `npm.cmd run dev` - local dev server
-- `npm.cmd run build` - typecheck + build to `../workbench`
+- `npm.cmd run build` - typecheck + build to `../dist`
 - `npm.cmd test` - run tests
 - `npm.cmd run preview` - preview production build
 

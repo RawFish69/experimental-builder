@@ -41,7 +41,7 @@ function ItemTypeIcon(props: { item: NormalizedItem }) {
 
   if (!backgroundPosition) {
     return (
-      <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--wb-border-muted)] bg-black/20 text-xs text-[var(--wb-muted)]">
+      <div className="wb-surface-strong flex h-9 w-9 items-center justify-center rounded-lg text-xs text-[var(--wb-muted)]">
         ?
       </div>
     );
@@ -49,7 +49,7 @@ function ItemTypeIcon(props: { item: NormalizedItem }) {
 
   return (
     <div
-      className="relative h-9 w-9 shrink-0 overflow-hidden rounded-lg border border-[var(--wb-border-muted)] bg-black/20"
+      className="wb-surface-strong relative h-9 w-9 shrink-0 overflow-hidden rounded-lg"
       title={`${props.item.type} icon`}
     >
       <div
@@ -70,19 +70,19 @@ function ItemTypeIcon(props: { item: NormalizedItem }) {
 function tierColor(tier: string): string {
   switch (tier) {
     case 'Mythic':
-      return 'text-violet-300';
+      return 'wb-tier-mythic';
     case 'Fabled':
-      return 'text-rose-300';
+      return 'wb-tier-fabled';
     case 'Legendary':
-      return 'text-cyan-300';
+      return 'wb-tier-legendary';
     case 'Rare':
-      return 'text-fuchsia-300';
+      return 'wb-tier-rare';
     case 'Unique':
-      return 'text-amber-300';
+      return 'wb-tier-unique';
     case 'Set':
-      return 'text-emerald-300';
+      return 'wb-tier-set';
     default:
-      return 'text-slate-200';
+      return 'wb-tier-normal';
   }
 }
 
@@ -151,10 +151,10 @@ function formatIdValue(_key: string, value: number): string {
   return value.toFixed(1).replace(/\.0$/, '');
 }
 
-function idChipColors(value: number): { chip: string; number: string; label: string } {
-  if (value > 0) return { chip: 'border-emerald-400/40 bg-emerald-400/10', number: 'text-emerald-300 font-semibold', label: 'text-emerald-200/90' };
-  if (value < 0) return { chip: 'border-rose-400/40 bg-rose-400/10', number: 'text-rose-300 font-semibold', label: 'text-rose-200/90' };
-  return { chip: 'border-[var(--wb-border-muted)] bg-black/10', number: 'text-[var(--wb-text)]', label: 'text-[var(--wb-muted)]' };
+function idChipTone(value: number): 'positive' | 'negative' | 'neutral' {
+  if (value > 0) return 'positive';
+  if (value < 0) return 'negative';
+  return 'neutral';
 }
 
 /** Renders full item stats (req, bonus, all IDs, damage, major IDs, rough scores). Use in hover popovers or detail panels. */
@@ -171,15 +171,15 @@ export function ItemDetailStats(props: { item: NormalizedItem; dense?: boolean }
       {(reqSummary || bonusSummary) && (
         <div className="flex flex-wrap gap-1.5 text-[11px]">
           {reqSummary ? (
-            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5">
-              <span className="font-semibold text-amber-200">Req</span>
-              <span className="ml-1 text-amber-200/90">{reqSummary}</span>
+            <span className="wb-pill" data-tone="req">
+              <span className="font-semibold">Req</span>
+              <span className="ml-1">{reqSummary}</span>
             </span>
           ) : null}
           {bonusSummary ? (
-            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5">
-              <span className="font-semibold text-cyan-200">SP</span>
-              <span className="ml-1 text-cyan-200/90">{bonusSummary}</span>
+            <span className="wb-pill" data-tone="bonus">
+              <span className="font-semibold">SP</span>
+              <span className="ml-1">{bonusSummary}</span>
             </span>
           ) : null}
         </div>
@@ -187,28 +187,27 @@ export function ItemDetailStats(props: { item: NormalizedItem; dense?: boolean }
       {ids.length > 0 ? (
         <div className="flex flex-wrap gap-1">
           {ids.map(({ key, value }) => {
-            const colors = idChipColors(value);
             return (
-              <span key={key} className={cn('wb-chip border text-[11px]', colors.chip)}>
-                <span className={colors.number}>{formatIdValue(key, value)}</span>
-                <span className={cn('ml-1', colors.label)}>{formatNumericIdLabel(key)}</span>
+              <span key={key} className="wb-pill text-[11px]" data-tone={idChipTone(value)}>
+                <span className={cn((value > 0 || value < 0) && 'font-semibold')}>{formatIdValue(key, value)}</span>
+                <span className="ml-1 opacity-90">{formatNumericIdLabel(key)}</span>
               </span>
             );
           })}
         </div>
       ) : null}
       {damageSummary ? (
-        <div className="flex flex-wrap gap-1.5 rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
+        <div className="wb-surface-strong flex flex-wrap gap-1.5 rounded px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
           {damageSummary.split(/\s{2,}/).map((part, i) => (
             <span key={i} className="whitespace-nowrap">{part}</span>
           ))}
         </div>
       ) : null}
       <div className="grid grid-cols-2 gap-1.5">
-        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('baseDps')} {Math.round(item.roughScoreFields.baseDps)}</div>
-        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('ehpProxy')} {Math.round(item.roughScoreFields.ehpProxy)}</div>
-        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('offenseScore')} {Math.round(item.roughScoreFields.offense)}</div>
-        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('skillPointTotal')} {Math.round(item.roughScoreFields.skillPointTotal)}</div>
+        <div className="wb-surface-strong rounded px-2 py-1">{formatNumericIdLabel('baseDps')} {Math.round(item.roughScoreFields.baseDps)}</div>
+        <div className="wb-surface-strong rounded px-2 py-1">{formatNumericIdLabel('ehpProxy')} {Math.round(item.roughScoreFields.ehpProxy)}</div>
+        <div className="wb-surface-strong rounded px-2 py-1">{formatNumericIdLabel('offenseScore')} {Math.round(item.roughScoreFields.offense)}</div>
+        <div className="wb-surface-strong rounded px-2 py-1">{formatNumericIdLabel('skillPointTotal')} {Math.round(item.roughScoreFields.skillPointTotal)}</div>
       </div>
       {item.majorIds.length > 0 ? (
         <div className="break-words text-[var(--wb-muted)]">Major IDs: {item.majorIds.join(', ')}</div>
@@ -251,7 +250,7 @@ export function ItemCard(props: {
     <div
       ref={props.dragData ? draggable.setNodeRef : undefined}
       style={style}
-      className={cn('wb-card', props.dense ? 'p-2' : props.compact ? 'p-2.5' : 'p-3', draggable.isDragging && 'ring-2 ring-emerald-300/40')}
+      className={cn('wb-card', props.dense ? 'p-2' : props.compact ? 'p-2.5' : 'p-3', draggable.isDragging && 'ring-2 ring-[var(--wb-success-border)]')}
       onMouseEnter={() => props.onHover?.(true)}
       onMouseLeave={() => props.onHover?.(false)}
     >
@@ -261,7 +260,7 @@ export function ItemCard(props: {
             type="button"
             {...draggable.listeners}
             {...draggable.attributes}
-            className="mt-0.5 rounded-md border border-[var(--wb-border)] p-1 text-[var(--wb-muted)] hover:bg-white/5"
+            className="wb-icon-button mt-0.5"
             aria-label={`Drag ${props.item.displayName}`}
           >
             <GripVertical size={14} />
@@ -291,15 +290,15 @@ export function ItemCard(props: {
               {(reqSummary || bonusSummary) && (
                 <div className="flex flex-wrap gap-1.5">
                   {reqSummary ? (
-                    <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5">
-                      <span className="font-semibold text-amber-200">Req</span>
-                      <span className="ml-1 text-amber-200/90">{reqSummary}</span>
+                    <span className="wb-pill" data-tone="req">
+                      <span className="font-semibold">Req</span>
+                      <span className="ml-1">{reqSummary}</span>
                     </span>
                   ) : null}
                   {bonusSummary ? (
-                    <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5">
-                      <span className="font-semibold text-cyan-200">SP</span>
-                      <span className="ml-1 text-cyan-200/90">{bonusSummary}</span>
+                    <span className="wb-pill" data-tone="bonus">
+                      <span className="font-semibold">SP</span>
+                      <span className="ml-1">{bonusSummary}</span>
                     </span>
                   ) : null}
                 </div>
@@ -307,18 +306,17 @@ export function ItemCard(props: {
               {ids.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
                   {ids.map(({ key, value }) => {
-                    const colors = idChipColors(value);
                     return (
-                      <span key={key} className={cn('wb-chip border text-[11px]', colors.chip)}>
-                        <span className={colors.number}>{formatIdValue(key, value)}</span>
-                        <span className={cn('ml-1', colors.label)}>{formatNumericIdLabel(key)}</span>
+                      <span key={key} className="wb-pill text-[11px]" data-tone={idChipTone(value)}>
+                        <span className={cn((value > 0 || value < 0) && 'font-semibold')}>{formatIdValue(key, value)}</span>
+                        <span className="ml-1 opacity-90">{formatNumericIdLabel(key)}</span>
                       </span>
                     );
                   })}
                 </div>
               ) : null}
               {damageSummary ? (
-                <div className="flex flex-wrap gap-1.5 rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
+                <div className="wb-surface-strong flex flex-wrap gap-1.5 rounded px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
                   {damageSummary.split(/\s{2,}/).map((part, i) => (
                     <span key={i} className="whitespace-nowrap">{part}</span>
                   ))}
@@ -331,16 +329,16 @@ export function ItemCard(props: {
           ) : null}
           {!props.compact ? (
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
-              <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
+              <div className="wb-surface-strong rounded-lg px-2 py-1">
                 {formatNumericIdLabel('baseDps')} {Math.round(props.item.roughScoreFields.baseDps)}
               </div>
-              <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
+              <div className="wb-surface-strong rounded-lg px-2 py-1">
                 {formatNumericIdLabel('ehpProxy')} {Math.round(props.item.roughScoreFields.ehpProxy)}
               </div>
-              <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
+              <div className="wb-surface-strong rounded-lg px-2 py-1">
                 {formatNumericIdLabel('offenseScore')} {Math.round(props.item.roughScoreFields.offense)}
               </div>
-              <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
+              <div className="wb-surface-strong rounded-lg px-2 py-1">
                 {formatNumericIdLabel('skillPointTotal')} {Math.round(props.item.roughScoreFields.skillPointTotal)}
               </div>
             </div>
