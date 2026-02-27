@@ -46,11 +46,19 @@ jobs:
           cp -r dist/* _site/
 
           for dir in atlas builder crafter custom css data docs ingredients ingredients_adv item items items_adv js map media sets thirdparty wynnfo; do
-            cp -r "$dir" "_site/"
+            if [ -e "$dir" ]; then
+              cp -r "$dir" "_site/"
+            else
+              echo "Skipping missing directory: $dir"
+            fi
           done
 
           for file in clean.json compress.json crafter.html customizer.html dps_data.json dps_vis.html ingreds_clean.json ingreds_compress.json items_compress.json LICENSE.txt manifest.json maploc_clean.json maploc_compress.json recipes.json recipes_clean.json recipes_compress.json skillpoints.csv terrs_clean.json terrs_compress.json tomes.json tome_map.json; do
-            cp "$file" "_site/"
+            if [ -e "$file" ]; then
+              cp "$file" "_site/"
+            else
+              echo "Skipping missing file: $file"
+            fi
           done
 
           mkdir -p _site/workbench
