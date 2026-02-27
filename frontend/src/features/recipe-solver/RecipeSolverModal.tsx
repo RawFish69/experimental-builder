@@ -138,6 +138,7 @@ export function RecipeSolverModal(props: {
   const [beamWidth, setBeamWidth] = useState(DEFAULT_RECIPE_SOLVER_CONSTRAINTS.beamWidth);
   const [topKPerSlot, setTopKPerSlot] = useState(DEFAULT_RECIPE_SOLVER_CONSTRAINTS.topKPerSlot);
   const [topN, setTopN] = useState(DEFAULT_RECIPE_SOLVER_CONSTRAINTS.topN);
+  const [maxReqs, setMaxReqs] = useState<[number | null, number | null, number | null, number | null, number | null]>([null, null, null, null, null]);
 
   const [results, setResults] = useState<RecipeSolverCandidate[]>([]);
   const [progress, setProgress] = useState('');
@@ -225,6 +226,7 @@ export function RecipeSolverModal(props: {
       topKPerSlot: Math.max(10, Math.min(300, topKPerSlot)),
       beamWidth: Math.max(20, Math.min(3000, beamWidth)),
       target,
+      maxReqs,
     };
 
     abortRef.current?.abort();
@@ -501,6 +503,34 @@ export function RecipeSolverModal(props: {
                   >
                     Add Threshold
                   </Button>
+                </div>
+                <div className="mt-3 border-t border-[var(--wb-border-muted)] pt-3">
+                  <FieldLabel>Max Skill Points (Req Limit)</FieldLabel>
+                  <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
+                    Exclude recipes that exceed any of these. Leave empty for no limit.
+                  </div>
+                  <div className="mt-2 grid grid-cols-5 gap-2">
+                    {(['STR', 'DEX', 'INT', 'DEF', 'AGI'] as const).map((stat, i) => (
+                      <div key={stat}>
+                        <label className="mb-0.5 block text-[11px] text-[var(--wb-muted)]">{stat}</label>
+                        <input
+                          className="wb-input w-full"
+                          type="number"
+                          min={0}
+                          placeholder="—"
+                          value={maxReqs[i] ?? ''}
+                          onChange={(e) => {
+                            const raw = e.target.value.trim();
+                            setMaxReqs(prev => {
+                              const next = [...prev] as [number | null, number | null, number | null, number | null, number | null];
+                              next[i] = raw === '' ? null : Math.max(0, Number(raw));
+                              return next;
+                            });
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             </details>

@@ -145,6 +145,8 @@ export interface RecipeSolverConstraints {
   topKPerSlot: number;
   beamWidth: number;
   target: Record<string, { min?: number; max?: number }>;
+  /** Max per-stat requirements. Recipe excluded if any req exceeds its max. Order: [STR, DEX, INT, DEF, AGI]. */
+  maxReqs: [number | null, number | null, number | null, number | null, number | null];
 }
 
 export interface RecipeSolverScoreBreakdown {
@@ -197,6 +199,7 @@ export const DEFAULT_RECIPE_SOLVER_CONSTRAINTS: RecipeSolverConstraints = {
   topKPerSlot: 120,
   beamWidth: 400,
   target: {},
+  maxReqs: [null, null, null, null, null],
 };
 
 export const NO_INGREDIENT_ID = 4000;

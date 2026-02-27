@@ -291,9 +291,20 @@ export function runRecipeSolverBeamSearch(args: RecipeSolverRunArgs): RecipeSolv
   const satisfying: RecipeSolverCandidate[] = [];
   const unsatisfying: RecipeSolverCandidate[] = [];
 
+  function satisfiesMaxReqs(stats: { reqs: [number, number, number, number, number] }): boolean {
+    const maxReqs = constraints.maxReqs;
+    for (let i = 0; i < 5; i++) {
+      const max = maxReqs[i];
+      if (max != null && Math.max(0, stats.reqs[i]) > max) return false;
+    }
+    return true;
+  }
+
   for (const c of allCandidates) {
     if (seenHashes.has(c.hash)) continue;
     seenHashes.add(c.hash);
+
+    if (!satisfiesMaxReqs(c.stats)) continue;
 
     if (hasThresholds && satisfiesThresholds(c.stats, constraints.target)) {
       satisfying.push(c);
