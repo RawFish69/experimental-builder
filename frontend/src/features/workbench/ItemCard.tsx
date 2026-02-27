@@ -142,7 +142,7 @@ function allIdentifications(item: NormalizedItem): Array<{ key: string; value: n
   return entries;
 }
 
-function formatIdValue(key: string, value: number): string {
+function formatIdValue(_key: string, value: number): string {
   if (Number.isInteger(value)) return String(value);
   return value.toFixed(1).replace(/\.0$/, '');
 }
