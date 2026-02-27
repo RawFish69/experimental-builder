@@ -102,16 +102,6 @@ export function App() {
     initialParsedRef.current = parseUrlState(window.location);
   }
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const { pathname, search, hash } = window.location;
-    if (pathname.endsWith('/workbench') || pathname.endsWith('/workbench/')) {
-      const base = pathname.replace(/\/workbench\/?$/, '') || '/';
-      const target = base + search + hash;
-      window.history.replaceState({}, '', target);
-    }
-  }, []);
-
   const initialParsed = initialParsedRef.current;
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);

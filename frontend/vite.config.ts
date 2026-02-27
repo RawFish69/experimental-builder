@@ -95,29 +95,9 @@ function compressJsonBridgePlugin() {
   }
 }
 
-function workbenchRedirectPlugin() {
-  return {
-    name: 'workbench-redirect',
-    configureServer(server: import('vite').ViteDevServer) {
-      server.middlewares.use((req, res, next) => {
-        const rawUrl = req.url ?? ''
-        const pathname = rawUrl.split('?')[0]
-        if (pathname === '/workbench' || pathname === '/workbench/' || pathname.startsWith('/workbench/')) {
-          const rest = pathname.slice(9) || '/' // strip '/workbench'
-          const redirect = rest + (rawUrl.includes('?') ? rawUrl.slice(rawUrl.indexOf('?')) : '')
-          res.writeHead(302, { Location: redirect })
-          res.end()
-          return
-        }
-        next()
-      })
-    },
-  }
-}
-
 export default defineConfig(({ command }) => ({
   base: command === 'build' ? './' : '/',
-  plugins: [react(), tailwindcss(), workbenchRedirectPlugin(), compressJsonBridgePlugin()],
+  plugins: [react(), tailwindcss(), compressJsonBridgePlugin()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),

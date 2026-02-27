@@ -22,13 +22,12 @@ export class ItemCatalogService {
   }
 
   private async fetchCompressPayload(): Promise<RawCompressPayload> {
-    const urls = [
-      './compress.json',
-      '../compress.json',
-      'compress.json',
-      '/workbench/compress.json',
-      '/compress.json',
-    ];
+    const resolve = (path: string) => {
+      if (typeof window === 'undefined') return path;
+      const base = window.location.href.split('?')[0].replace(/\/[^/]*$/, '/') || window.location.origin + '/';
+      return new URL(path, base).href;
+    };
+    const urls = [resolve('compress.json'), resolve('./compress.json'), './compress.json', '../compress.json', 'compress.json'];
     let lastError: unknown = null;
     const failures: string[] = [];
     for (const url of urls) {
