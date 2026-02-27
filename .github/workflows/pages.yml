@@ -43,6 +43,8 @@ jobs:
         run: |
           mkdir -p _site
           cp -r dist/* _site/
+          cp -r builder _site/
+          cp -r crafter _site/
           touch _site/.nojekyll
 
       - name: Upload Pages artifact

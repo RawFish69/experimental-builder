@@ -590,7 +590,10 @@ export function RecipeSolverModal(props: {
 
 function getCrafterUrl(hash: string): string {
   const raw = hash.startsWith('CR-') ? hash.slice(3) : hash;
-  return `../crafter/#${raw}`;
+  const base = typeof window !== 'undefined'
+    ? new URL('crafter/', window.location.href).href
+    : 'crafter/';
+  return `${base}#${raw}`;
 }
 
 
