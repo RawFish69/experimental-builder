@@ -125,6 +125,8 @@ export function App() {
   const searchTimerRef = useRef<number | null>(null);
   const writeUrlTimerRef = useRef<number | null>(null);
 
+  const hydrateSnapshot = useWorkbenchStore((s) => s.hydrateSnapshot);
+  const setLegacyHash = useWorkbenchStore((s) => s.setLegacyHash);
   const store = useWorkbenchStore(
     useShallow((state) => ({
       slots: state.slots,
@@ -166,9 +168,9 @@ export function App() {
 
   useEffect(() => {
     if (initialParsed?.workbenchPatch) {
-      store.hydrateSnapshot(initialParsed.workbenchPatch);
+      hydrateSnapshot(initialParsed.workbenchPatch);
     }
-  }, [initialParsed, store]);
+  }, [initialParsed?.workbenchPatch, hydrateSnapshot]);
 
   useEffect(() => {
     let cancelled = false;
@@ -201,13 +203,14 @@ export function App() {
                 slotPatch[slot as ItemSlot] = found;
               }
             }
-            store.hydrateSnapshot({
+            const currentLevel = useWorkbenchStore.getState().level;
+            hydrateSnapshot({
               ...initialParsed.workbenchPatch,
               slots: { ...(initialParsed.workbenchPatch?.slots ?? {}), ...slotPatch } as WorkbenchSnapshot['slots'],
-              level: decoded.level ?? initialParsed.workbenchPatch?.level ?? store.level,
+              level: decoded.level ?? initialParsed.workbenchPatch?.level ?? currentLevel,
               legacyHash: decoded.legacyHash,
             });
-            store.setLegacyHash(decoded.legacyHash);
+            setLegacyHash(decoded.legacyHash);
             setStatusMessage('Imported legacy builder hash into Workbench.');
           } catch (error) {
             console.error(error);
@@ -226,7 +229,7 @@ export function App() {
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
       if (writeUrlTimerRef.current) window.clearTimeout(writeUrlTimerRef.current);
     };
-  }, [initialParsed, store]);
+  }, [initialParsed, hydrateSnapshot, setLegacyHash]);
 
   useEffect(() => {
     if (!catalog || !searchClientReady || !searchClientRef.current) return;

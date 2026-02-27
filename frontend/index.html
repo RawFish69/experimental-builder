@@ -5,6 +5,14 @@
     <link rel="icon" href="data:," />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Build Solver</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #070c14; color: #e5f4ff; }
+      #root { min-height: 100%; }
+      #root:has(#app-loading) { display: flex; align-items: center; justify-content: center; }
+      #app-loading { padding: 1.5rem 2rem; text-align: center; }
+      #app-loading .title { font-size: 1.25rem; font-weight: 600; }
+      #app-loading .sub { margin-top: 0.5rem; font-size: 0.875rem; color: #93aac3; }
+    </style>
     <!-- Google Analytics -->
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-8D8GME84PS"></script>
     <script>
@@ -15,7 +23,12 @@
     </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div id="app-loading">
+        <div class="title">Loading...</div>
+        <div class="sub">Preparing item catalog, search index, and build state.</div>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
