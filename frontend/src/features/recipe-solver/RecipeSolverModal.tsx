@@ -249,11 +249,13 @@ export function RecipeSolverModal(props: {
     abortRef.current = abort;
     setRunning(true);
     setProgress('Starting...');
+    let lastProgressDetail = '';
 
     try {
       const candidates = await workerRef.current!.run(catalog, constraints, {
         signal: abort.signal,
         onProgress: (event) => {
+          if (event.detail) lastProgressDetail = event.detail;
           setProgressEvent(event);
           setProgress(
             `${event.phase}: ${event.expandedSlots}/${event.totalSlots} slots, beam ${event.beamSize}, states ${event.processedStates}${event.detail ? ` | ${event.detail}` : ''}`,
@@ -262,7 +264,11 @@ export function RecipeSolverModal(props: {
       });
       setResults(candidates);
       if (candidates.length === 0) {
-        setError('No valid candidates found. Try relaxing constraints, increasing beam width/top K, or choosing a different recipe.');
+        setError(
+          lastProgressDetail
+            ? `No valid candidates found. ${lastProgressDetail}`
+            : 'No valid candidates found. Try relaxing constraints, increasing beam width/top K, or choosing a different recipe.',
+        );
       } else {
         setProgress(`Done. ${candidates.length} candidates found.`);
       }
