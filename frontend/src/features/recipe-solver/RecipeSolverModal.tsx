@@ -59,26 +59,44 @@ function presetWeights(preset: OptimizationPreset): RecipeSolverWeights {
   }
 }
 
+/** All IDs that can appear on crafted items (from ingredients + recipe). Used for Stat Thresholds dropdown. */
 const STAT_LABEL: Record<string, string> = {
   durability: 'Durability', duration: 'Duration',
   sdPct: 'Spell Dmg %', sdRaw: 'Spell Dmg Raw', mdPct: 'Melee Dmg %', mdRaw: 'Melee Dmg Raw',
   damPct: 'Damage %', poison: 'Poison', hpBonus: 'HP Bonus', hprRaw: 'HPR Raw', hprPct: 'HPR %',
   mr: 'Mana Regen', ms: 'Mana Steal', ls: 'Life Steal', spd: 'Walk Speed',
-  xpb: 'XP Bonus', lb: 'Loot Bonus', ref: 'Reflection', thorns: 'Thorns',
+  xpb: 'XP Bonus', lb: 'Loot Bonus', ref: 'Reflection', thorns: 'Thorns', expd: 'Exploding',
   str: 'STR', dex: 'DEX', int: 'INT', def: 'DEF', agi: 'AGI',
   eDamPct: 'Earth Dmg %', tDamPct: 'Thunder Dmg %', wDamPct: 'Water Dmg %',
-  fDamPct: 'Fire Dmg %', aDamPct: 'Air Dmg %',
+  fDamPct: 'Fire Dmg %', aDamPct: 'Air Dmg %', nDamPct: 'Neutral Dmg %', rDamPct: 'Elem Dmg %',
   eDefPct: 'Earth Def %', tDefPct: 'Thunder Def %', wDefPct: 'Water Def %',
-  fDefPct: 'Fire Def %', aDefPct: 'Air Def %',
+  fDefPct: 'Fire Def %', aDefPct: 'Air Def %', rDefPct: 'Elem Def %',
   atkTier: 'Atk Speed Bonus', spRegen: 'Soul Point Regen', eSteal: 'Emerald Steal',
   rSdRaw: 'Rainbow Spell Raw', critDamPct: 'Crit Damage %',
+  spPct1: '1st Spell Cost %', spRaw1: '1st Spell Cost Raw',
+  spPct2: '2nd Spell Cost %', spRaw2: '2nd Spell Cost Raw',
+  spPct3: '3rd Spell Cost %', spRaw3: '3rd Spell Cost Raw',
+  spPct4: '4th Spell Cost %', spRaw4: '4th Spell Cost Raw',
   sprint: 'Sprint', sprintReg: 'Sprint Regen', jh: 'Jump Height',
+  lq: 'Loot Quality', gXp: 'Gather XP', gSpd: 'Gather Speed',
+  healPct: 'Healing %', kb: 'Knockback', weakenEnemy: 'Weaken Enemy', slowEnemy: 'Slow Enemy',
+  maxMana: 'Max Mana', mainAttackRange: 'Main Attack Range',
+  eDamRaw: 'Earth Dmg Raw', tDamRaw: 'Thunder Dmg Raw', wDamRaw: 'Water Dmg Raw',
+  fDamRaw: 'Fire Dmg Raw', aDamRaw: 'Air Dmg Raw', nDamRaw: 'Neutral Dmg Raw', damRaw: 'Damage Raw', rDamRaw: 'Elem Dmg Raw',
 };
 
-const COMMON_STAT_KEYS = [
+/** Full list of craftable stat IDs (Legacy rolledIDs + skill points + durability/duration). */
+const CRAFTABLE_STAT_KEYS = [
   'durability', 'duration',
-  'sdPct', 'sdRaw', 'mdPct', 'mdRaw', 'mr', 'ms', 'ls', 'spd', 'hpBonus', 'hprRaw',
-  'poison', 'str', 'dex', 'int', 'def', 'agi', 'eDamPct', 'tDamPct', 'wDamPct', 'fDamPct', 'aDamPct',
+  'hprPct', 'mr', 'sdPct', 'mdPct', 'ls', 'ms', 'xpb', 'lb', 'ref', 'thorns', 'expd', 'spd',
+  'atkTier', 'poison', 'hpBonus', 'spRegen', 'eSteal', 'hprRaw', 'sdRaw', 'mdRaw',
+  'fDamPct', 'wDamPct', 'aDamPct', 'tDamPct', 'eDamPct', 'nDamPct', 'rDamPct', 'damPct',
+  'fDefPct', 'wDefPct', 'aDefPct', 'tDefPct', 'eDefPct', 'rDefPct',
+  'spPct1', 'spRaw1', 'spPct2', 'spRaw2', 'spPct3', 'spRaw3', 'spPct4', 'spRaw4',
+  'rSdRaw', 'sprint', 'sprintReg', 'jh', 'lq', 'gXp', 'gSpd',
+  'eDamRaw', 'tDamRaw', 'wDamRaw', 'fDamRaw', 'aDamRaw', 'nDamRaw', 'damRaw', 'rDamRaw',
+  'critDamPct', 'healPct', 'maxMana',
+  'str', 'dex', 'int', 'def', 'agi',
 ];
 
 function formatStatLabel(key: string): string {
@@ -439,7 +457,7 @@ export function RecipeSolverModal(props: {
                           value={row.key}
                           onChange={(e) => setThresholds(prev => prev.map(r => r.id === row.id ? { ...r, key: e.target.value } : r))}
                         >
-                          {COMMON_STAT_KEYS.map(key => (
+                          {CRAFTABLE_STAT_KEYS.map(key => (
                             <option key={key} value={key}>{formatStatLabel(key)} ({key})</option>
                           ))}
                         </select>
@@ -479,7 +497,7 @@ export function RecipeSolverModal(props: {
                 <div>
                   <Button
                     variant="ghost"
-                    onClick={() => setThresholds(prev => [...prev, { id: thresholdSeqRef.current++, key: COMMON_STAT_KEYS[0], min: null, max: null }])}
+                    onClick={() => setThresholds(prev => [...prev, { id: thresholdSeqRef.current++, key: CRAFTABLE_STAT_KEYS[0], min: null, max: null }])}
                   >
                     Add Threshold
                   </Button>

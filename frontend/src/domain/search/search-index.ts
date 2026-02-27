@@ -1,7 +1,7 @@
 import MiniSearch from 'minisearch';
 import type { CharacterClass, ItemCategoryKey, NormalizedItem } from '@/domain/items/types';
 import { itemCanBeWornByClass, itemMatchesLevel } from '@/domain/items/types';
-import type { NumericFilterKey, SearchFacetCounts, SearchFilterState, SearchResultPage, SearchResultRow, SearchSortKey } from '@/domain/search/filter-schema';
+import type { SearchFacetCounts, SearchFilterState, SearchResultPage, SearchResultRow, SearchSortKey } from '@/domain/search/filter-schema';
 
 interface MiniDoc {
   id: number;
@@ -10,15 +10,11 @@ interface MiniDoc {
   majorIdsText: string;
 }
 
-function getNumericValue(item: NormalizedItem, key: NumericFilterKey): number {
-  switch (key) {
-    case 'level':
-      return item.level;
-    case 'powderSlots':
-      return item.powderSlots;
-    default:
-      return item.numericIndex[key] ?? 0;
-  }
+function getNumericValue(item: NormalizedItem, key: string): number {
+  if (key === 'level') return item.level;
+  if (key === 'powderSlots' || key === 'slots') return item.powderSlots;
+  if (key === 'baseDps') return item.roughScoreFields.baseDps;
+  return item.numericIndex[key] ?? 0;
 }
 
 function matchesCategoryFilter(item: NormalizedItem, categories: ItemCategoryKey[]): boolean {
@@ -32,11 +28,21 @@ function matchesStringSet<T extends string>(value: T | null | undefined, selecte
 }
 
 function matchesNumericRanges(item: NormalizedItem, state: SearchFilterState): boolean {
-  for (const [key, range] of Object.entries(state.numericRanges) as [NumericFilterKey, { min?: number; max?: number }][]) {
+  for (const [key, range] of Object.entries(state.numericRanges)) {
     if (!range) continue;
     const value = getNumericValue(item, key);
     if (typeof range.min === 'number' && value < range.min) return false;
     if (typeof range.max === 'number' && value > range.max) return false;
+  }
+  return true;
+}
+
+function matchesExclusionRanges(item: NormalizedItem, state: SearchFilterState): boolean {
+  for (const [key, range] of Object.entries(state.exclusionRanges ?? {})) {
+    if (!range) continue;
+    const value = getNumericValue(item, key);
+    if (typeof range.max === 'number' && value > range.max) return false;
+    if (typeof range.min === 'number' && value < range.min) return false;
   }
   return true;
 }
@@ -67,26 +73,17 @@ export function matchesSearchFilters(item: NormalizedItem, state: SearchFilterSt
   }
   if (!matchesMajorIds(item, state.majorIds)) return false;
   if (!matchesNumericRanges(item, state)) return false;
+  if (!matchesExclusionRanges(item, state)) return false;
   if (!matchesToggles(item, state)) return false;
   return true;
 }
 
 function baseSortValue(item: NormalizedItem, sort: SearchSortKey): number {
-  switch (sort) {
-    case 'level':
-      return item.level;
-    case 'baseDps':
-      return item.roughScoreFields.baseDps;
-    case 'ehpProxy':
-      return item.roughScoreFields.ehpProxy;
-    case 'offenseScore':
-      return item.roughScoreFields.offense;
-    case 'skillPointTotal':
-      return item.roughScoreFields.skillPointTotal;
-    case 'relevance':
-    default:
-      return 0;
-  }
+  if (sort === 'relevance') return 0;
+  if (sort === 'level') return item.level;
+  if (sort === 'powderSlots' || sort === 'slots') return item.powderSlots;
+  if (sort === 'baseDps') return item.roughScoreFields.baseDps;
+  return item.numericIndex[sort] ?? 0;
 }
 
 function customRelevance(item: NormalizedItem, text: string, miniScore: number): number {
@@ -106,16 +103,18 @@ function compareRows(
   state: SearchFilterState,
 ): number {
   const dir = state.sortDescending ? -1 : 1;
-  if (state.sort === 'relevance') {
-    if (a.relevance !== b.relevance) return (a.relevance > b.relevance ? -1 : 1) * (state.sortDescending ? 1 : -1);
-  } else {
-    const av = baseSortValue(a.item, state.sort);
-    const bv = baseSortValue(b.item, state.sort);
-    if (av !== bv) return av < bv ? -dir : dir;
+  const keys = state.sortKeys?.length ? state.sortKeys : ['relevance'];
+
+  for (const sortKey of keys) {
+    if (sortKey === 'relevance') {
+      if (a.relevance !== b.relevance) return (a.relevance > b.relevance ? -1 : 1) * (state.sortDescending ? 1 : -1);
+    } else {
+      const av = baseSortValue(a.item, sortKey);
+      const bv = baseSortValue(b.item, sortKey);
+      if (av !== bv) return av < bv ? -dir : dir;
+    }
   }
 
-  // Tie-breaks
-  if (a.item.level !== b.item.level) return a.item.level < b.item.level ? 1 : -1;
   return a.item.displayName.localeCompare(b.item.displayName);
 }
 

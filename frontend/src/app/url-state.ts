@@ -61,7 +61,8 @@ export interface ParsedWorkbenchUrlState {
 
 export function parseSearchStateFromUrl(url: URL): SearchFilterState {
   const q = url.searchParams.get('q') ?? '';
-  const sort = url.searchParams.get('sort');
+  const sortParam = url.searchParams.get('sort');
+  const sortKeys = sortParam ? sortParam.split(',').map((s) => s.trim()).filter(Boolean) : [];
   const sdesc = url.searchParams.get('sdesc');
   const view = url.searchParams.get('view');
   const wear = url.searchParams.get('wearLevel');
@@ -91,11 +92,15 @@ export function parseSearchStateFromUrl(url: URL): SearchFilterState {
   const numericRanges = jsonParse<SearchFilterState['numericRanges']>(
     url.searchParams.get('ranges') ?? '',
   ) ?? {};
+  const exclusionRanges = jsonParse<SearchFilterState['exclusionRanges']>(
+    url.searchParams.get('excludeRanges') ?? '',
+  ) ?? {};
+  const resultsBelow = url.searchParams.get('resultsBelow');
 
   return sanitizeSearchFilterState({
     ...DEFAULT_SEARCH_FILTER_STATE,
     text: q,
-    sort: sort ?? DEFAULT_SEARCH_FILTER_STATE.sort,
+    sortKeys: sortKeys.length > 0 ? sortKeys : DEFAULT_SEARCH_FILTER_STATE.sortKeys,
     sortDescending: sdesc === null ? DEFAULT_SEARCH_FILTER_STATE.sortDescending : sdesc !== '0',
     viewMode: view ?? DEFAULT_SEARCH_FILTER_STATE.viewMode,
     onlyWearableAtLevel: wear ? Number(wear) : DEFAULT_SEARCH_FILTER_STATE.onlyWearableAtLevel,
@@ -108,6 +113,8 @@ export function parseSearchStateFromUrl(url: URL): SearchFilterState {
     classReqs,
     majorIds,
     numericRanges,
+    exclusionRanges,
+    resultsBelowBuild: resultsBelow === null ? DEFAULT_SEARCH_FILTER_STATE.resultsBelowBuild : resultsBelow === '1',
   });
 }
 
@@ -168,65 +175,29 @@ export function parseUrlState(locationLike: Location = window.location): ParsedW
 }
 
 export function encodeWorkbenchSnapshot(snapshot: WorkbenchSnapshot): string {
+  // Minimal build payload for shareable URLs: slots, locks, level, class. Bins omitted to keep URLs short.
   const payload = {
     slots: snapshot.slots,
-    binsByCategory: snapshot.binsByCategory,
     locks: snapshot.locks,
     level: snapshot.level,
     characterClass: snapshot.characterClass,
-    selectedSlot: snapshot.selectedSlot,
     legacyHash: snapshot.legacyHash,
   };
   return base64UrlEncode(JSON.stringify(payload));
 }
 
 export function writeUrlState(args: {
-  search: SearchFilterState;
+  search?: SearchFilterState;
   workbenchSnapshot: WorkbenchSnapshot;
   legacyHash?: string | null;
   mode?: string | null;
   abilityTreeState?: AbilityTreeUrlState | null;
   replace?: boolean;
 }): void {
-  const url = new URL(window.location.href);
-  const { search } = args;
+  const url = new URL(window.location.origin + window.location.pathname);
   const params = url.searchParams;
 
-  const setArray = (key: string, values: string[]): void => {
-    if (values.length === 0) params.delete(key);
-    else params.set(key, values.join(','));
-  };
-
-  if (search.text) params.set('q', search.text);
-  else params.delete('q');
-  if (search.sort !== DEFAULT_SEARCH_FILTER_STATE.sort) params.set('sort', search.sort);
-  else params.delete('sort');
-  if (search.sortDescending !== DEFAULT_SEARCH_FILTER_STATE.sortDescending) {
-    params.set('sdesc', search.sortDescending ? '1' : '0');
-  } else {
-    params.delete('sdesc');
-  }
-  if (search.viewMode !== DEFAULT_SEARCH_FILTER_STATE.viewMode) params.set('view', search.viewMode);
-  else params.delete('view');
-
-  setArray('cats', search.categories);
-  setArray('types', search.types);
-  setArray('tiers', search.tiers);
-  setArray('classReqs', search.classReqs);
-  setArray('majorIds', search.majorIds);
-
-  if (search.onlyWearableAtLevel !== null) params.set('wearLevel', String(search.onlyWearableAtLevel));
-  else params.delete('wearLevel');
-  if (search.onlyClassCompatible) params.set('classCompat', '1');
-  else params.delete('classCompat');
-  // Default is excludeRestricted=false (include restricted). Encode true as "1".
-  if (search.excludeRestricted) params.set('excludeRestricted', '1');
-  else params.delete('excludeRestricted');
-
-  const hasRanges = Object.keys(search.numericRanges).length > 0;
-  if (hasRanges) params.set('ranges', JSON.stringify(search.numericRanges));
-  else params.delete('ranges');
-
+  // Only persist build data: workbench snapshot + ability tree. No search state.
   params.set('wb', encodeWorkbenchSnapshot(args.workbenchSnapshot));
 
   if (args.abilityTreeState && Object.keys(args.abilityTreeState.selectedByClass ?? {}).length > 0) {

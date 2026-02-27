@@ -207,7 +207,7 @@ export function WorkbenchBoard(props: {
   return (
     <Panel
       className="flex min-h-0 flex-col"
-      title="Workbench"
+      title="Build"
       headerRight={
         <>
           <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => props.store.undo()}>

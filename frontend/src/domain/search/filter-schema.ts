@@ -1,36 +1,12 @@
 import { z } from 'zod';
 import type { CharacterClass, ItemCategoryKey } from '@/domain/items/types';
 
-export const SEARCH_SORT_KEYS = [
-  'relevance',
-  'level',
-  'baseDps',
-  'ehpProxy',
-  'offenseScore',
-  'skillPointTotal',
-] as const;
-export type SearchSortKey = (typeof SEARCH_SORT_KEYS)[number];
+export const SEARCH_SORT_KEYS = ['relevance', 'level'] as const;
+/** Sort can be relevance, level, or any numeric ID key from catalog (e.g. averageDps, ehpProxy, mr). */
+export type SearchSortKey = (typeof SEARCH_SORT_KEYS)[number] | string;
 
 export const SEARCH_VIEW_MODES = ['list', 'grid'] as const;
 export type SearchViewMode = (typeof SEARCH_VIEW_MODES)[number];
-
-export const NUMERIC_FILTER_KEYS = [
-  'level',
-  'baseDps',
-  'ehpProxy',
-  'offenseScore',
-  'skillPointTotal',
-  'reqTotal',
-  'hp',
-  'hpBonus',
-  'sdPct',
-  'sdRaw',
-  'mdPct',
-  'mdRaw',
-  'spd',
-  'powderSlots',
-] as const;
-export type NumericFilterKey = (typeof NUMERIC_FILTER_KEYS)[number];
 
 export interface NumericRange {
   min?: number;
@@ -44,13 +20,19 @@ export interface SearchFilterState {
   tiers: string[];
   classReqs: CharacterClass[];
   majorIds: string[];
-  numericRanges: Partial<Record<NumericFilterKey, NumericRange>>;
+  /** Min/max ranges for any numeric ID (e.g. mr, sdPct, ehpProxy). Keys from catalog.facetsMeta.numericRanges. */
+  numericRanges: Partial<Record<string, NumericRange>>;
+  /** IDs to avoid: exclude items where value exceeds max (or is below min). E.g. exclude mr > 50. */
+  exclusionRanges: Partial<Record<string, NumericRange>>;
   onlyWearableAtLevel: number | null;
   onlyClassCompatible: boolean;
   excludeRestricted: boolean;
-  sort: SearchSortKey;
+  /** Sort keys in order: first is primary, rest are tie-breakers. */
+  sortKeys: string[];
   sortDescending: boolean;
   viewMode: SearchViewMode;
+  /** When true, search results list appears below the Workbench (middle panel) instead of in the left sidebar. */
+  resultsBelowBuild: boolean;
 }
 
 export interface SearchResultRow {
@@ -79,12 +61,14 @@ export const DEFAULT_SEARCH_FILTER_STATE: SearchFilterState = {
   classReqs: [],
   majorIds: [],
   numericRanges: {},
+  exclusionRanges: {},
   onlyWearableAtLevel: 106,
   onlyClassCompatible: false,
   excludeRestricted: false,
-  sort: 'relevance',
+  sortKeys: ['relevance'],
   sortDescending: true,
   viewMode: 'list',
+  resultsBelowBuild: true,
 };
 
 const numericRangeSchema = z.object({
@@ -102,16 +86,24 @@ export const searchFilterStateSchema = z.object({
     .catch([]),
   majorIds: z.array(z.string()).catch([]),
   numericRanges: z.record(z.string(), numericRangeSchema).catch({}),
+  exclusionRanges: z.record(z.string(), numericRangeSchema).catch({}),
   onlyWearableAtLevel: z.number().int().min(1).max(106).nullable().catch(106),
   onlyClassCompatible: z.boolean().catch(false),
   excludeRestricted: z.boolean().catch(false),
-  sort: z.enum(SEARCH_SORT_KEYS).catch('relevance'),
+  sortKeys: z.array(z.string()).catch(['relevance']),
   sortDescending: z.boolean().catch(true),
   viewMode: z.enum(SEARCH_VIEW_MODES).catch('list'),
+  resultsBelowBuild: z.boolean().catch(true),
 });
 
 export function sanitizeSearchFilterState(input: unknown): SearchFilterState {
+  const raw = input as Record<string, unknown>;
   const parsed = searchFilterStateSchema.parse(input);
+  const sortKeys = Array.isArray(parsed.sortKeys) && parsed.sortKeys.length > 0
+    ? parsed.sortKeys
+    : typeof raw?.sort === 'string'
+      ? [raw.sort]
+      : ['relevance'];
   return {
     text: parsed.text,
     categories: parsed.categories as ItemCategoryKey[],
@@ -119,13 +111,15 @@ export function sanitizeSearchFilterState(input: unknown): SearchFilterState {
     tiers: parsed.tiers,
     classReqs: parsed.classReqs,
     majorIds: parsed.majorIds,
-    numericRanges: parsed.numericRanges as Partial<Record<NumericFilterKey, NumericRange>>,
+    numericRanges: parsed.numericRanges as Partial<Record<string, NumericRange>>,
+    exclusionRanges: (parsed.exclusionRanges ?? {}) as Partial<Record<string, NumericRange>>,
     onlyWearableAtLevel: parsed.onlyWearableAtLevel,
     onlyClassCompatible: parsed.onlyClassCompatible,
     excludeRestricted: parsed.excludeRestricted,
-    sort: parsed.sort,
+    sortKeys,
     sortDescending: parsed.sortDescending,
     viewMode: parsed.viewMode,
+    resultsBelowBuild: Boolean(parsed.resultsBelowBuild),
   };
 }
 
@@ -136,10 +130,8 @@ export function mergeSearchState(
   return sanitizeSearchFilterState({
     ...base,
     ...patch,
-    numericRanges: {
-      ...base.numericRanges,
-      ...(patch.numericRanges ?? {}),
-    },
+    numericRanges: patch.numericRanges !== undefined ? patch.numericRanges : base.numericRanges,
+    exclusionRanges: patch.exclusionRanges !== undefined ? patch.exclusionRanges : (base.exclusionRanges ?? {}),
   });
 }
 

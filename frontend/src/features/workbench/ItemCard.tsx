@@ -2,6 +2,7 @@ import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Lock, Pin, Plus } from 'lucide-react';
 import type { NormalizedItem } from '@/domain/items/types';
+import { formatNumericIdLabel } from '@/domain/items/numeric-id-labels';
 import { Button, cn } from '@/components/ui';
 
 export type DragSourceKind = 'search' | 'bin' | 'slot';
@@ -87,52 +88,96 @@ function tierColor(tier: string): string {
 
 function formatReqSummary(item: NormalizedItem): string | null {
   const reqs = [
-    { label: 'S', value: item.numeric.reqStr },
-    { label: 'D', value: item.numeric.reqDex },
-    { label: 'I', value: item.numeric.reqInt },
-    { label: 'F', value: item.numeric.reqDef },
-    { label: 'A', value: item.numeric.reqAgi },
+    { label: 'Strength', value: item.numeric.reqStr },
+    { label: 'Dexterity', value: item.numeric.reqDex },
+    { label: 'Intelligence', value: item.numeric.reqInt },
+    { label: 'Defense', value: item.numeric.reqDef },
+    { label: 'Agility', value: item.numeric.reqAgi },
   ].filter((entry) => entry.value > 0);
   if (reqs.length === 0) return null;
-  return reqs.map((entry) => `${entry.label}${entry.value}`).join(' ');
+  return reqs.map((entry) => `${entry.label} ${entry.value}`).join(', ');
 }
 
 function formatBonusSummary(item: NormalizedItem): string | null {
   const bonuses = [
-    { label: '+S', value: item.numeric.spStr },
-    { label: '+D', value: item.numeric.spDex },
-    { label: '+I', value: item.numeric.spInt },
-    { label: '+F', value: item.numeric.spDef },
-    { label: '+A', value: item.numeric.spAgi },
+    { label: 'Strength', value: item.numeric.spStr },
+    { label: 'Dexterity', value: item.numeric.spDex },
+    { label: 'Intelligence', value: item.numeric.spInt },
+    { label: 'Defense', value: item.numeric.spDef },
+    { label: 'Agility', value: item.numeric.spAgi },
   ].filter((entry) => entry.value !== 0);
   if (bonuses.length === 0) return null;
-  return bonuses.map((entry) => `${entry.label}${entry.value}`).join(' ');
+  return bonuses.map((entry) => `${entry.label} ${entry.value > 0 ? '+' : ''}${entry.value}`).join(', ');
 }
 
 function formatDamageLines(item: NormalizedItem): string | null {
   const raw = item.legacyRaw;
   const pairs = [
-    ['N', typeof raw.nDam === 'string' ? raw.nDam : ''],
-    ['E', typeof raw.eDam === 'string' ? raw.eDam : ''],
-    ['T', typeof raw.tDam === 'string' ? raw.tDam : ''],
-    ['W', typeof raw.wDam === 'string' ? raw.wDam : ''],
-    ['F', typeof raw.fDam === 'string' ? raw.fDam : ''],
-    ['A', typeof raw.aDam === 'string' ? raw.aDam : ''],
+    ['Neutral', typeof raw.nDam === 'string' ? raw.nDam : ''],
+    ['Earth', typeof raw.eDam === 'string' ? raw.eDam : ''],
+    ['Thunder', typeof raw.tDam === 'string' ? raw.tDam : ''],
+    ['Water', typeof raw.wDam === 'string' ? raw.wDam : ''],
+    ['Fire', typeof raw.fDam === 'string' ? raw.fDam : ''],
+    ['Air', typeof raw.aDam === 'string' ? raw.aDam : ''],
   ].filter(([, value]) => value && value !== '0-0');
   if (pairs.length === 0) return null;
-  return pairs.map(([label, value]) => `${label}:${value}`).join('  ');
+  return pairs.map(([label, value]) => `${label}: ${value}`).join('  ');
 }
 
 function detailChips(item: NormalizedItem): string[] {
   const chips: string[] = [];
-  if (item.numeric.baseDps > 0) chips.push(`DPS ${Math.round(item.numeric.baseDps)}`);
-  if (item.numeric.hp + item.numeric.hpBonus !== 0) chips.push(`HP ${Math.round(item.numeric.hp + item.numeric.hpBonus)}`);
-  if (item.numeric.mr !== 0) chips.push(`MR ${item.numeric.mr}`);
-  if (item.numeric.ms !== 0) chips.push(`MS ${item.numeric.ms}`);
-  if (item.numeric.spd !== 0) chips.push(`WS ${item.numeric.spd}`);
-  if (item.powderSlots > 0) chips.push(`Powders ${item.powderSlots}`);
-  if (item.atkSpd) chips.push(`AS ${item.atkSpd}`);
+  if (item.numeric.baseDps > 0) chips.push(`${formatNumericIdLabel('baseDps')} ${Math.round(item.numeric.baseDps)}`);
+  if (item.numeric.hp + item.numeric.hpBonus !== 0) chips.push(`${formatNumericIdLabel('hp')} ${Math.round(item.numeric.hp + item.numeric.hpBonus)}`);
+  if (item.numeric.mr !== 0) chips.push(`${formatNumericIdLabel('mr')} ${item.numeric.mr}`);
+  if (item.numeric.ms !== 0) chips.push(`${formatNumericIdLabel('ms')} ${item.numeric.ms}`);
+  if (item.numeric.spd !== 0) chips.push(`${formatNumericIdLabel('spd')} ${item.numeric.spd}`);
+  if (item.powderSlots > 0) chips.push(`${formatNumericIdLabel('slots')} ${item.powderSlots}`);
+  if (item.atkSpd) chips.push(`${formatNumericIdLabel('atkTier')} ${item.atkSpd}`);
   return chips.slice(0, 6);
+}
+
+/** Renders full item stats (req, bonus, chips, damage, major IDs, rough scores). Use in hover popovers or detail panels. */
+export function ItemDetailStats(props: { item: NormalizedItem; dense?: boolean }) {
+  const { item } = props;
+  const reqSummary = formatReqSummary(item);
+  const bonusSummary = formatBonusSummary(item);
+  const damageSummary = formatDamageLines(item);
+  const chips = detailChips(item);
+  const dense = props.dense ?? false;
+
+  return (
+    <div className={cn('space-y-1.5', dense ? 'text-[11px]' : 'text-xs')}>
+      {(reqSummary || bonusSummary) && (
+        <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 text-[var(--wb-muted)]">
+          {reqSummary ? <span className="mr-2">Req {reqSummary}</span> : null}
+          {bonusSummary ? <span>SP {bonusSummary}</span> : null}
+        </div>
+      )}
+      {chips.length > 0 ? (
+        <div className="flex flex-wrap gap-1">
+          {chips.map((chip) => (
+            <span key={chip} className="wb-chip text-[11px]">
+              {chip}
+            </span>
+          ))}
+        </div>
+      ) : null}
+      {damageSummary ? (
+        <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 font-mono text-[11px] leading-relaxed text-[var(--wb-muted)]">
+          {damageSummary}
+        </div>
+      ) : null}
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('baseDps')} {Math.round(item.roughScoreFields.baseDps)}</div>
+        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('ehpProxy')} {Math.round(item.roughScoreFields.ehpProxy)}</div>
+        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('offenseScore')} {Math.round(item.roughScoreFields.offense)}</div>
+        <div className="rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">{formatNumericIdLabel('skillPointTotal')} {Math.round(item.roughScoreFields.skillPointTotal)}</div>
+      </div>
+      {item.majorIds.length > 0 ? (
+        <div className="break-words text-[var(--wb-muted)]">Major IDs: {item.majorIds.join(', ')}</div>
+      ) : null}
+    </div>
+  );
 }
 
 export function ItemCard(props: {
@@ -188,7 +233,7 @@ export function ItemCard(props: {
         <ItemTypeIcon item={props.item} />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-1">
-            <div className={cn('truncate text-sm font-semibold leading-tight', tierColor(props.item.tier))}>{props.item.displayName}</div>
+            <div className={cn('break-words text-sm font-semibold leading-tight', tierColor(props.item.tier))}>{props.item.displayName}</div>
             {props.badge ? <span className="wb-chip">{props.badge}</span> : null}
             {props.locked ? (
               <span className="wb-chip inline-flex items-center gap-1">
@@ -227,23 +272,23 @@ export function ItemCard(props: {
                 </div>
               ) : null}
               {props.item.majorIds.length > 0 ? (
-                <div className="truncate text-[var(--wb-muted)]">Major IDs: {props.item.majorIds.join(', ')}</div>
+                <div className="break-words text-[var(--wb-muted)]">Major IDs: {props.item.majorIds.join(', ')}</div>
               ) : null}
             </div>
           ) : null}
           {!props.compact ? (
             <div className="mt-2 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
-                DPS {Math.round(props.item.roughScoreFields.baseDps)}
+                {formatNumericIdLabel('baseDps')} {Math.round(props.item.roughScoreFields.baseDps)}
               </div>
               <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
-                EHP {Math.round(props.item.roughScoreFields.ehpProxy)}
+                {formatNumericIdLabel('ehpProxy')} {Math.round(props.item.roughScoreFields.ehpProxy)}
               </div>
               <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
-                Off {Math.round(props.item.roughScoreFields.offense)}
+                {formatNumericIdLabel('offenseScore')} {Math.round(props.item.roughScoreFields.offense)}
               </div>
               <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1">
-                SP {Math.round(props.item.roughScoreFields.skillPointTotal)}
+                {formatNumericIdLabel('skillPointTotal')} {Math.round(props.item.roughScoreFields.skillPointTotal)}
               </div>
             </div>
           ) : null}

@@ -19,7 +19,7 @@ import { getClassFromWeaponType, ITEM_SLOTS, slotToCategory } from '@/domain/ite
 import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE } from '@/domain/search/filter-schema';
 import { SearchWorkerClient } from '@/domain/search/search-worker-client';
-import { SearchPanel } from '@/features/search/SearchPanel';
+import { SearchPanel, SearchResultList } from '@/features/search/SearchPanel';
 import { BuildSummaryPanel } from '@/features/workbench/BuildSummaryPanel';
 import { WorkbenchBoard } from '@/features/workbench/WorkbenchBoard';
 import { evaluateBuild } from '@/domain/build/build-metrics';
@@ -101,6 +101,16 @@ export function App() {
   if (!initialParsedRef.current && typeof window !== 'undefined') {
     initialParsedRef.current = parseUrlState(window.location);
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { pathname, search, hash } = window.location;
+    if (pathname.endsWith('/workbench') || pathname.endsWith('/workbench/')) {
+      const base = pathname.replace(/\/workbench\/?$/, '') || '/';
+      const target = base + search + hash;
+      window.history.replaceState({}, '', target);
+    }
+  }, []);
 
   const initialParsed = initialParsedRef.current;
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
@@ -524,7 +534,7 @@ export function App() {
     return (
       <div className="flex min-h-full items-center justify-center p-6">
         <div className="wb-panel max-w-xl rounded-2xl p-6">
-          <div className="text-xl font-semibold">Workbench failed to load</div>
+          <div className="text-xl font-semibold">Failed to load</div>
           <div className="mt-2 text-sm text-[var(--wb-muted)]">{catalogError}</div>
         </div>
       </div>
@@ -535,8 +545,8 @@ export function App() {
     return (
       <div className="flex min-h-full items-center justify-center p-6">
         <div className="wb-panel max-w-xl rounded-2xl p-6">
-          <div className="text-xl font-semibold">Loading Workbench...</div>
-          <div className="mt-2 text-sm text-[var(--wb-muted)]">Preparing item catalog, search index, and workbench state.</div>
+          <div className="text-xl font-semibold">Loading...</div>
+          <div className="mt-2 text-sm text-[var(--wb-muted)]">Preparing item catalog, search index, and build state.</div>
         </div>
       </div>
     );
@@ -547,8 +557,8 @@ export function App() {
       <div className="flex min-h-full flex-col gap-3 p-3 lg:p-4">
         <header className="wb-panel wb-hero rounded-2xl px-4 py-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <div className="mb-1 flex flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="wb-chip border-cyan-300/30 bg-cyan-300/8 text-cyan-100">Standalone Alpha</span>
                 <span className="wb-chip">Legacy-compatible imports</span>
                 {abilityTreeEvaluation ? (
@@ -557,18 +567,26 @@ export function App() {
                   </span>
                 ) : null}
               </div>
-              <div className="flex items-center gap-2 text-lg font-semibold">
-                <Hammer size={18} className="text-cyan-200" />
-                Workbench
-              </div>
-              <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                Modular loadout planning studio with a compatibility bridge for legacy builder links and hashes.
-              </div>
-              <div className="mt-1 text-[11px] tracking-wide text-[var(--wb-muted-2)]">
-                Ability tree editing now works in Workbench using legacy data/rules. Workbench summary metrics still exclude ability-tree effects for now.
+              <div className="text-xs text-[var(--wb-muted)]">
+                Modular loadout planning studio with legacy builder compatibility.
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+
+            <button
+              type="button"
+              className="build-solver-logo-btn order-first flex shrink-0 cursor-pointer items-center justify-center gap-2 self-center rounded-xl px-6 py-3 text-lg font-bold tracking-tight text-cyan-50 shadow-lg sm:px-8 sm:py-4 sm:text-xl lg:order-none"
+              onClick={() => {
+                setAbilityTreeOpen(false);
+                setRecipeSolverOpen(false);
+                setAutoBuilderOpen(true);
+              }}
+              title="Open Build Solver – beam search over item combinations"
+            >
+              <Hammer size={28} className="text-amber-200/90" strokeWidth={2.5} />
+              Build Solver
+            </button>
+
+            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-[var(--wb-muted)]">Class</label>
                 <select
@@ -607,16 +625,6 @@ export function App() {
                 Ability Tree
               </Button>
               <Button
-                className="rounded-lg border border-amber-400/40 bg-amber-400/15 px-4 py-2 text-sm font-semibold text-amber-100 hover:bg-amber-400/25"
-                onClick={() => {
-                  setAbilityTreeOpen(false);
-                  setRecipeSolverOpen(false);
-                  setAutoBuilderOpen(true);
-                }}
-              >
-                Build Solver
-              </Button>
-              <Button
                 className="rounded-lg border border-violet-400/40 bg-violet-400/15 px-4 py-2 text-sm font-semibold text-violet-100 hover:bg-violet-400/25"
                 onClick={() => {
                   setAutoBuilderOpen(false);
@@ -631,7 +639,9 @@ export function App() {
           {statusMessage ? <div className="mt-2 text-xs text-emerald-200">{statusMessage}</div> : null}
         </header>
 
-        <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px]">
+        <main
+          className={`grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px] ${searchState.resultsBelowBuild ? 'xl:grid-rows-[1fr_auto]' : ''}`}
+        >
           <SearchPanel
             catalog={catalog}
             state={searchState}
@@ -641,7 +651,7 @@ export function App() {
             selectedSlot={snapshot.selectedSlot}
             onPin={handlePinFromSearch}
             onEquip={handleEquipFromSearch}
-            onHover={(itemId, slot) => store.setComparePreview(itemId && slot ? { itemId, slot } : null)}
+            onHover={() => {}}
           />
 
           <WorkbenchBoard
@@ -677,6 +687,21 @@ export function App() {
               onOpenLegacyBuilder: openLegacyBuilder,
             }}
           />
+
+          {searchState.resultsBelowBuild ? (
+            <div className="xl:col-start-2 flex min-h-[240px] flex-col overflow-hidden rounded-xl border border-zinc-600/60 bg-zinc-800/80">
+              <SearchResultList
+                catalog={catalog}
+                result={searchResult}
+                selectedSlot={snapshot.selectedSlot}
+                state={searchState}
+                loading={searchLoading}
+                onPin={handlePinFromSearch}
+                onEquip={handleEquipFromSearch}
+                onHover={() => {}}
+              />
+            </div>
+          ) : null}
         </main>
       </div>
 

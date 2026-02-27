@@ -35,7 +35,7 @@ describe('search-index', () => {
     const result = searchItems(catalog.items, {
       ...DEFAULT_SEARCH_FILTER_STATE,
       text: 'blue',
-      sort: 'relevance',
+      sortKeys: ['relevance'],
     });
     expect(result.rows.map((row) => row.id)).toEqual([5, 4]);
   });
@@ -44,7 +44,7 @@ describe('search-index', () => {
     const result = searchItems(catalog.items, {
       ...DEFAULT_SEARCH_FILTER_STATE,
       categories: ['weapon'],
-      sort: 'baseDps',
+      sortKeys: ['baseDps'],
       sortDescending: true,
     });
     expect(result.rows[0]?.id).toBe(3);
