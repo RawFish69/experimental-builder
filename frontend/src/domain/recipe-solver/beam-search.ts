@@ -534,7 +534,7 @@ function runDeterministicThresholdFallback(args: {
     if (!optimisticMinThresholdStillPossible(partialIds, remainingSlots, poolById, constraints, optimisticBestByKey)) return;
 
     if (depth === TOTAL_SLOTS) {
-      const ingredientIds = partialIds as [number, number, number, number, number, number];
+      const ingredientIds = [...partialIds] as [number, number, number, number, number, number];
       if (!includesAllMustIngredients(ingredientIds, mustIncludeSet)) return;
       const ingredients = ingredientIds.map((id) => poolById.get(id) ?? catalog.noIngredient);
 
