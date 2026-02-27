@@ -17,7 +17,7 @@ import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { getClassFromWeaponType, ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
 import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter-schema';
-import { DEFAULT_SEARCH_FILTER_STATE } from '@/domain/search/filter-schema';
+import { DEFAULT_SEARCH_FILTER_STATE, hasActiveSearchFilters } from '@/domain/search/filter-schema';
 import { SearchWorkerClient } from '@/domain/search/search-worker-client';
 import { SearchPanel, SearchResultList } from '@/features/search/SearchPanel';
 import { BuildSummaryPanel } from '@/features/workbench/BuildSummaryPanel';
@@ -120,6 +120,7 @@ export function App() {
   );
   const [abilityTreeVersionHint, setAbilityTreeVersionHint] = useState<string | null>(initialParsed?.abilityTree?.version ?? null);
   const [statusMessage, setStatusMessage] = useState<string>('');
+  const [searchTrigger, setSearchTrigger] = useState(0);
 
   const searchClientRef = useRef<SearchWorkerClient | null>(null);
   const searchTimerRef = useRef<number | null>(null);
@@ -233,6 +234,11 @@ export function App() {
 
   useEffect(() => {
     if (!catalog || !searchClientReady || !searchClientRef.current) return;
+    if (!hasActiveSearchFilters(searchState) && searchTrigger === 0) {
+      setSearchResult(null);
+      setSearchLoading(false);
+      return;
+    }
     if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
     setSearchLoading(true);
     searchTimerRef.current = window.setTimeout(async () => {
@@ -249,7 +255,7 @@ export function App() {
     return () => {
       if (searchTimerRef.current) window.clearTimeout(searchTimerRef.current);
     };
-  }, [catalog, searchClientReady, searchState]);
+  }, [catalog, searchClientReady, searchState, searchTrigger]);
 
   useEffect(() => {
     if (!abilityTreeOpen || !catalog) return;
@@ -632,9 +638,7 @@ export function App() {
           {statusMessage ? <div className="mt-2 text-xs text-emerald-200">{statusMessage}</div> : null}
         </header>
 
-        <main
-          className={`grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px] ${searchState.resultsBelowBuild ? 'xl:grid-rows-[1fr_auto]' : ''}`}
-        >
+        <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px]">
           <SearchPanel
             catalog={catalog}
             state={searchState}
@@ -645,6 +649,7 @@ export function App() {
             onPin={handlePinFromSearch}
             onEquip={handleEquipFromSearch}
             onHover={() => {}}
+            onSearch={() => setSearchTrigger((t) => t + 1)}
           />
 
           <WorkbenchBoard
@@ -654,6 +659,21 @@ export function App() {
             onShareWorkbench={() => void shareWorkbench()}
             onExportWorkbench={exportWorkbench}
             onImportWorkbench={() => void importWorkbench()}
+            searchResults={
+              searchState.resultsBelowBuild ? (
+                <SearchResultList
+                  catalog={catalog}
+                  result={searchResult}
+                  selectedSlot={snapshot.selectedSlot}
+                  state={searchState}
+                  loading={searchLoading}
+                  onPin={handlePinFromSearch}
+                  onEquip={handleEquipFromSearch}
+                  onHover={() => {}}
+                  embedded
+                />
+              ) : undefined
+            }
           />
 
           <BuildSummaryPanel
@@ -680,21 +700,6 @@ export function App() {
               onOpenLegacyBuilder: openLegacyBuilder,
             }}
           />
-
-          {searchState.resultsBelowBuild ? (
-            <div className="xl:col-start-2 flex min-h-[240px] flex-col overflow-hidden rounded-xl border border-zinc-600/60 bg-zinc-800/80">
-              <SearchResultList
-                catalog={catalog}
-                result={searchResult}
-                selectedSlot={snapshot.selectedSlot}
-                state={searchState}
-                loading={searchLoading}
-                onPin={handlePinFromSearch}
-                onEquip={handleEquipFromSearch}
-                onHover={() => {}}
-              />
-            </div>
-          ) : null}
         </main>
       </div>
 

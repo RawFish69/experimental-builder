@@ -7,7 +7,7 @@ import { categoryLabel, ITEM_CATEGORY_KEYS, slotToCategory } from '@/domain/item
 import { formatNumericIdLabel } from '@/domain/items/numeric-id-labels';
 import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE, mergeSearchState } from '@/domain/search/filter-schema';
-import { Button, ChipButton, FieldLabel, Panel } from '@/components/ui';
+import { Button, ChipButton, cn, FieldLabel, Panel } from '@/components/ui';
 import { ItemCard, ItemDetailStats } from '@/features/workbench/ItemCard';
 
 const PRESET_STORAGE_KEY = 'workbench-search-presets:v2';
@@ -38,6 +38,7 @@ function toggleString(arr: string[], value: string): string[] {
 
 const ROW_HEIGHT_SIDEBAR = 88;
 const ROW_HEIGHT_BELOW = 84;
+const PAGE_SIZE = 50;
 
 function SearchResultItem(props: {
   catalog: CatalogSnapshot;
@@ -63,6 +64,7 @@ function SearchResultItem(props: {
         item={item}
         compact
         dense
+        showDetails
         dragData={{ kind: 'search', itemId: item.id }}
         onPin={() => props.onPin(item.id)}
         onEquip={() => props.onEquip(item.id)}
@@ -82,12 +84,24 @@ export function SearchResultList(props: {
   onPin(itemId: number): void;
   onEquip(itemId: number): void;
   onHover(itemId: number | null, slot: ItemSlot | null): void;
+  /** When true, results are embedded in another panel (e.g. workbench) and use flexible height */
+  embedded?: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
   const rows = props.result?.rows ?? [];
   const deferredRows = useDeferredValue(rows);
+  const [page, setPage] = useState(0);
   const [hoveredForStats, setHoveredForStats] = useState<{ itemId: number; rect: DOMRect } | null>(null);
   const hideTimerRef = useRef<number | null>(null);
+
+  const totalItems = deferredRows.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+  const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
+  const pageRows = deferredRows.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(0);
+  }, [props.result]);
 
   const setHovered = (val: { itemId: number; rect: DOMRect } | null) => {
     if (hideTimerRef.current) {
@@ -104,7 +118,7 @@ export function SearchResultList(props: {
   const isSidebar = !props.state.resultsBelowBuild;
   const itemsPerRow = isSidebar ? 1 : 3;
   const rowHeight = isSidebar ? ROW_HEIGHT_SIDEBAR : ROW_HEIGHT_BELOW;
-  const rowCount = Math.ceil(deferredRows.length / itemsPerRow);
+  const rowCount = Math.ceil(pageRows.length / itemsPerRow);
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
@@ -114,20 +128,75 @@ export function SearchResultList(props: {
 
   const hoveredItem = hoveredForStats ? props.catalog.itemsById.get(hoveredForStats.itemId) : null;
 
+  const hasSearched = props.result != null || props.loading;
+  const statusText = props.loading
+    ? 'Searching...'
+    : props.result
+      ? `${props.result.total.toLocaleString()} results`
+      : 'Search or filter to see items';
+  const startItem = totalItems === 0 ? 0 : clampedPage * PAGE_SIZE + 1;
+  const endItem = Math.min((clampedPage + 1) * PAGE_SIZE, totalItems);
+
   return (
     <div className="min-h-0 flex-1">
-      <div className="mb-2 flex items-center justify-between text-xs text-[var(--wb-muted)]">
-        <span>{props.loading ? 'Searching...' : props.result ? `${props.result.total.toLocaleString()} results` : 'Loading...'}</span>
-        <span>
-          {(props.state.sortKeys ?? ['relevance']).map((k) => formatNumericIdLabel(k)).join(' → ')}
-          {props.state.sortDescending ? ' ↓' : ' ↑'}
-        </span>
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--wb-muted)]">
+        <div className="flex items-center gap-3">
+          <span>{statusText}</span>
+          {hasSearched && totalItems > 0 ? (
+            <span className="shrink-0">
+              {totalPages > 1 ? (
+                <>
+                  <button
+                    type="button"
+                    className="mr-1 rounded px-1.5 py-0.5 hover:bg-white/10 disabled:opacity-40"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={clampedPage <= 0}
+                    title="Previous page"
+                  >
+                    ←
+                  </button>
+                  <span>{(startItem).toLocaleString()}–{endItem.toLocaleString()}</span>
+                  <button
+                    type="button"
+                    className="ml-1 rounded px-1.5 py-0.5 hover:bg-white/10 disabled:opacity-40"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={clampedPage >= totalPages - 1}
+                    title="Next page"
+                  >
+                    →
+                  </button>
+                </>
+              ) : null}
+            </span>
+          ) : null}
+        </div>
+        {hasSearched ? (
+          <span>
+            {(props.state.sortKeys ?? ['relevance']).map((k) => formatNumericIdLabel(k)).join(' → ')}
+            {props.state.sortDescending ? ' ↓' : ' ↑'}
+          </span>
+        ) : null}
       </div>
-      <div ref={parentRef} className="wb-scrollbar h-[calc(100vh-26rem)] overflow-auto rounded-xl border border-[var(--wb-border-muted)] bg-black/10">
+      <div
+        ref={parentRef}
+        className={cn(
+          'wb-scrollbar overflow-auto rounded-xl border border-[var(--wb-border-muted)] bg-black/10',
+          props.embedded ? 'min-h-[160px] flex-1' : 'h-[calc(100vh-26rem)]',
+        )}
+      >
+        {!hasSearched ? (
+          <div className="flex min-h-[120px] flex-col items-center justify-center gap-1 px-4 py-6 text-center text-sm text-[var(--wb-muted)]">
+            <span>Enter a search term, select categories, or apply filters above to see items.</span>
+          </div>
+        ) : pageRows.length === 0 ? (
+          <div className="flex min-h-[120px] flex-col items-center justify-center gap-1 px-4 py-6 text-center text-sm text-[var(--wb-muted)]">
+            <span>No items match your filters.</span>
+          </div>
+        ) : (
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map((virtualRow) => {
             const baseIdx = virtualRow.index * itemsPerRow;
-            const rowItems = deferredRows.slice(baseIdx, baseIdx + itemsPerRow);
+            const rowItems = pageRows.slice(baseIdx, baseIdx + itemsPerRow);
             return (
               <div
                 key={virtualRow.key}
@@ -160,6 +229,7 @@ export function SearchResultList(props: {
             );
           })}
         </div>
+        )}
       </div>
 
       {hoveredItem && hoveredForStats
@@ -198,6 +268,7 @@ export function SearchPanel(props: {
   onPin(itemId: number): void;
   onEquip(itemId: number): void;
   onHover(itemId: number | null, slot: ItemSlot | null): void;
+  onSearch?: () => void;
 }) {
   const [presets, setPresets] = useState<SearchPreset[]>(() => (typeof window === 'undefined' ? [] : loadPresets()));
   const majorIdSuggestions = useMemo(() => props.catalog.facetsMeta.majorIds.slice(0, 20), [props.catalog]);
@@ -235,14 +306,25 @@ export function SearchPanel(props: {
       headerRight={null}
     >
       <div className="flex min-h-0 flex-col gap-3 p-3">
-        <div>
-          <FieldLabel>Search Text</FieldLabel>
-          <input
-            className="wb-input"
-            placeholder="Name, lore, major ID..."
-            value={props.state.text}
-            onChange={(e) => updateState({ text: e.target.value })}
-          />
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <FieldLabel>Search Text</FieldLabel>
+            <input
+              className="wb-input"
+              placeholder="Name, lore, major ID..."
+              value={props.state.text}
+              onChange={(e) => updateState({ text: e.target.value })}
+            />
+          </div>
+          <Button
+            variant="primary"
+            className="shrink-0"
+            onClick={props.onSearch}
+            disabled={props.loading}
+            title="Run search with current filters"
+          >
+            {props.loading ? 'Searching…' : 'Show items'}
+          </Button>
         </div>
 
         <div className="flex items-center gap-2">

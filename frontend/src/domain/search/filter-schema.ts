@@ -123,6 +123,19 @@ export function sanitizeSearchFilterState(input: unknown): SearchFilterState {
   };
 }
 
+/** True when the user has applied filters that warrant running a search (avoids loading full catalog by default). */
+export function hasActiveSearchFilters(state: SearchFilterState): boolean {
+  if (state.text.trim() !== '') return true;
+  if (state.categories.length > 0) return true;
+  if (state.types.length > 0) return true;
+  if (state.tiers.length > 0) return true;
+  if (state.classReqs.length > 0) return true;
+  if (state.majorIds.length > 0) return true;
+  if (state.numericRanges && Object.keys(state.numericRanges).length > 0) return true;
+  if (state.exclusionRanges && Object.keys(state.exclusionRanges).length > 0) return true;
+  return false;
+}
+
 export function mergeSearchState(
   base: SearchFilterState,
   patch: Partial<SearchFilterState>,

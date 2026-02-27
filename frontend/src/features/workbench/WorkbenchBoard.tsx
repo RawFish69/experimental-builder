@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -169,6 +170,8 @@ export function WorkbenchBoard(props: {
   onShareWorkbench?: () => void;
   onExportWorkbench?: () => void;
   onImportWorkbench?: () => void;
+  /** When set, search results are embedded in this panel instead of below */
+  searchResults?: ReactNode;
 }) {
   const [showItemDetails, setShowItemDetails] = useState(false);
   const slotGroups = useMemo(
@@ -300,6 +303,12 @@ export function WorkbenchBoard(props: {
             ))}
           </div>
         </ScrollArea>
+
+        {props.searchResults ? (
+          <div className="flex min-h-[220px] max-h-[40vh] min-w-0 flex-col overflow-hidden rounded-xl border border-[var(--wb-border-muted)] bg-black/10">
+            {props.searchResults}
+          </div>
+        ) : null}
 
         <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">

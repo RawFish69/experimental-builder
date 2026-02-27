@@ -124,47 +124,80 @@ function formatDamageLines(item: NormalizedItem): string | null {
   return pairs.map(([label, value]) => `${label}: ${value}`).join('  ');
 }
 
-function detailChips(item: NormalizedItem): string[] {
-  const chips: string[] = [];
-  if (item.numeric.baseDps > 0) chips.push(`${formatNumericIdLabel('baseDps')} ${Math.round(item.numeric.baseDps)}`);
-  if (item.numeric.hp + item.numeric.hpBonus !== 0) chips.push(`${formatNumericIdLabel('hp')} ${Math.round(item.numeric.hp + item.numeric.hpBonus)}`);
-  if (item.numeric.mr !== 0) chips.push(`${formatNumericIdLabel('mr')} ${item.numeric.mr}`);
-  if (item.numeric.ms !== 0) chips.push(`${formatNumericIdLabel('ms')} ${item.numeric.ms}`);
-  if (item.numeric.spd !== 0) chips.push(`${formatNumericIdLabel('spd')} ${item.numeric.spd}`);
-  if (item.powderSlots > 0) chips.push(`${formatNumericIdLabel('slots')} ${item.powderSlots}`);
-  if (item.atkSpd) chips.push(`${formatNumericIdLabel('atkTier')} ${item.atkSpd}`);
-  return chips.slice(0, 6);
+/** IDs to exclude from full display (derived/aggregate, not raw identifications) */
+const DERIVED_IDS = new Set(['reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore', 'sumSpPct', 'sumSpRaw']);
+
+/** All identifications with non-zero values, sorted by label. */
+function allIdentifications(item: NormalizedItem): Array<{ key: string; value: number }> {
+  const entries: Array<{ key: string; value: number }> = [];
+  for (const [key, value] of Object.entries(item.numericIndex)) {
+    if (DERIVED_IDS.has(key)) continue;
+    const num = typeof value === 'number' ? value : 0;
+    if (num !== 0) entries.push({ key, value: num });
+  }
+  if (item.powderSlots > 0 && !entries.some((e) => e.key === 'slots')) {
+    entries.push({ key: 'slots', value: item.powderSlots });
+  }
+  entries.sort((a, b) => formatNumericIdLabel(a.key).localeCompare(formatNumericIdLabel(b.key)));
+  return entries;
 }
 
-/** Renders full item stats (req, bonus, chips, damage, major IDs, rough scores). Use in hover popovers or detail panels. */
+function formatIdValue(key: string, value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value.toFixed(1).replace(/\.0$/, '');
+}
+
+function idChipColors(value: number): { chip: string; number: string; label: string } {
+  if (value > 0) return { chip: 'border-emerald-400/40 bg-emerald-400/10', number: 'text-emerald-300 font-semibold', label: 'text-emerald-200/90' };
+  if (value < 0) return { chip: 'border-rose-400/40 bg-rose-400/10', number: 'text-rose-300 font-semibold', label: 'text-rose-200/90' };
+  return { chip: 'border-[var(--wb-border-muted)] bg-black/10', number: 'text-[var(--wb-text)]', label: 'text-[var(--wb-muted)]' };
+}
+
+/** Renders full item stats (req, bonus, all IDs, damage, major IDs, rough scores). Use in hover popovers or detail panels. */
 export function ItemDetailStats(props: { item: NormalizedItem; dense?: boolean }) {
   const { item } = props;
   const reqSummary = formatReqSummary(item);
   const bonusSummary = formatBonusSummary(item);
   const damageSummary = formatDamageLines(item);
-  const chips = detailChips(item);
+  const ids = allIdentifications(item);
   const dense = props.dense ?? false;
 
   return (
     <div className={cn('space-y-1.5', dense ? 'text-[11px]' : 'text-xs')}>
       {(reqSummary || bonusSummary) && (
-        <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 text-[var(--wb-muted)]">
-          {reqSummary ? <span className="mr-2">Req {reqSummary}</span> : null}
-          {bonusSummary ? <span>SP {bonusSummary}</span> : null}
+        <div className="flex flex-wrap gap-1.5 text-[11px]">
+          {reqSummary ? (
+            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5">
+              <span className="font-semibold text-amber-200">Req</span>
+              <span className="ml-1 text-amber-200/90">{reqSummary}</span>
+            </span>
+          ) : null}
+          {bonusSummary ? (
+            <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5">
+              <span className="font-semibold text-cyan-200">SP</span>
+              <span className="ml-1 text-cyan-200/90">{bonusSummary}</span>
+            </span>
+          ) : null}
         </div>
       )}
-      {chips.length > 0 ? (
+      {ids.length > 0 ? (
         <div className="flex flex-wrap gap-1">
-          {chips.map((chip) => (
-            <span key={chip} className="wb-chip text-[11px]">
-              {chip}
-            </span>
-          ))}
+          {ids.map(({ key, value }) => {
+            const colors = idChipColors(value);
+            return (
+              <span key={key} className={cn('wb-chip border text-[11px]', colors.chip)}>
+                <span className={colors.number}>{formatIdValue(key, value)}</span>
+                <span className={cn('ml-1', colors.label)}>{formatNumericIdLabel(key)}</span>
+              </span>
+            );
+          })}
         </div>
       ) : null}
       {damageSummary ? (
-        <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 font-mono text-[11px] leading-relaxed text-[var(--wb-muted)]">
-          {damageSummary}
+        <div className="flex flex-wrap gap-1.5 rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
+          {damageSummary.split(/\s{2,}/).map((part, i) => (
+            <span key={i} className="whitespace-nowrap">{part}</span>
+          ))}
         </div>
       ) : null}
       <div className="grid grid-cols-2 gap-1.5">
@@ -208,7 +241,7 @@ export function ItemCard(props: {
   const reqSummary = props.showDetails ? formatReqSummary(props.item) : null;
   const bonusSummary = props.showDetails ? formatBonusSummary(props.item) : null;
   const damageSummary = props.showDetails ? formatDamageLines(props.item) : null;
-  const chips = props.showDetails ? detailChips(props.item) : [];
+  const ids = props.showDetails ? allIdentifications(props.item) : [];
 
   return (
     <div
@@ -252,23 +285,39 @@ export function ItemCard(props: {
           {props.showDetails ? (
             <div className={cn('mt-2 space-y-1', props.dense ? 'text-[11px]' : 'text-xs')}>
               {(reqSummary || bonusSummary) && (
-                <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 text-[var(--wb-muted)]">
-                  {reqSummary ? <span className="mr-2">Req {reqSummary}</span> : null}
-                  {bonusSummary ? <span>SP {bonusSummary}</span> : null}
+                <div className="flex flex-wrap gap-1.5">
+                  {reqSummary ? (
+                    <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5">
+                      <span className="font-semibold text-amber-200">Req</span>
+                      <span className="ml-1 text-amber-200/90">{reqSummary}</span>
+                    </span>
+                  ) : null}
+                  {bonusSummary ? (
+                    <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5">
+                      <span className="font-semibold text-cyan-200">SP</span>
+                      <span className="ml-1 text-cyan-200/90">{bonusSummary}</span>
+                    </span>
+                  ) : null}
                 </div>
               )}
-              {chips.length > 0 ? (
+              {ids.length > 0 ? (
                 <div className="flex flex-wrap gap-1">
-                  {chips.map((chip) => (
-                    <span key={chip} className="wb-chip text-[11px]">
-                      {chip}
-                    </span>
-                  ))}
+                  {ids.map(({ key, value }) => {
+                    const colors = idChipColors(value);
+                    return (
+                      <span key={key} className={cn('wb-chip border text-[11px]', colors.chip)}>
+                        <span className={colors.number}>{formatIdValue(key, value)}</span>
+                        <span className={cn('ml-1', colors.label)}>{formatNumericIdLabel(key)}</span>
+                      </span>
+                    );
+                  })}
                 </div>
               ) : null}
               {damageSummary ? (
-                <div className="rounded-lg border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1 font-mono text-[11px] leading-relaxed text-[var(--wb-muted)]">
-                  {damageSummary}
+                <div className="flex flex-wrap gap-1.5 rounded border border-[var(--wb-border-muted)] bg-black/15 px-2 py-1.5 text-[11px] leading-relaxed text-[var(--wb-muted)]">
+                  {damageSummary.split(/\s{2,}/).map((part, i) => (
+                    <span key={i} className="whitespace-nowrap">{part}</span>
+                  ))}
                 </div>
               ) : null}
               {props.item.majorIds.length > 0 ? (

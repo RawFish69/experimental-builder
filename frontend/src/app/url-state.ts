@@ -1,9 +1,19 @@
+import LZString from 'lz-string';
 import { z } from 'zod';
 import type { SearchFilterState } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE, sanitizeSearchFilterState } from '@/domain/search/filter-schema';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
 import type { AbilityTreeUrlState } from '@/domain/ability-tree/types';
 import { ITEM_CATEGORY_KEYS, ITEM_SLOTS } from '@/domain/items/types';
+
+/** Short slot keys for compact URL encoding (like legacy) */
+const SLOT_SHORT: Record<string, string> = {
+  helmet: 'h', chestplate: 'c', leggings: 'l', boots: 'b',
+  ring1: 'r1', ring2: 'r2', bracelet: 'br', necklace: 'n', weapon: 'w',
+};
+const SLOT_LONG: Record<string, string> = Object.fromEntries(
+  Object.entries(SLOT_SHORT).map(([k, v]) => [v, k]),
+);
 
 const wbUrlSnapshotSchema = z.object({
   slots: z.record(z.string(), z.number().int().nullable()).optional(),
@@ -13,7 +23,7 @@ const wbUrlSnapshotSchema = z.object({
   characterClass: z.enum(['Warrior', 'Assassin', 'Mage', 'Archer', 'Shaman']).nullable().optional(),
   selectedSlot: z.string().nullable().optional(),
   legacyHash: z.string().nullable().optional(),
-});
+}).passthrough();
 
 const atreeUrlStateSchema = z.object({
   version: z.string().nullable().optional(),
@@ -41,6 +51,21 @@ function base64UrlDecode(value: string): string {
   const binary = atob(padded);
   const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
   return new TextDecoder().decode(bytes);
+}
+
+function decodeParam(value: string): string | null {
+  const decompressed = LZString.decompressFromEncodedURIComponent(value);
+  if (decompressed != null && decompressed !== '') return decompressed;
+  try {
+    return base64UrlDecode(value);
+  } catch {
+    return null;
+  }
+}
+
+function encodeParam(value: string): string {
+  const compressed = LZString.compressToEncodedURIComponent(value);
+  return compressed;
 }
 
 function jsonParse<T>(value: string): T | null {
@@ -118,12 +143,50 @@ export function parseSearchStateFromUrl(url: URL): SearchFilterState {
   });
 }
 
+function normalizeWbPayload(raw: Record<string, unknown>): Record<string, unknown> {
+  const slots = raw.s ?? raw.slots;
+  const locks = raw.k ?? raw.locks;
+  const level = raw.l ?? raw.level;
+  const characterClass = raw.c ?? raw.characterClass;
+  const legacyHash = raw.h ?? raw.legacyHash;
+  let selectedSlot = raw.selectedSlot;
+  if (typeof selectedSlot === 'string' && SLOT_LONG[selectedSlot]) {
+    selectedSlot = SLOT_LONG[selectedSlot];
+  }
+  const binsByCategory = raw.binsByCategory;
+  if (slots && typeof slots === 'object') {
+    const expanded: Record<string, number | null> = {};
+    for (const [key, val] of Object.entries(slots)) {
+      const slot = SLOT_LONG[key] ?? key;
+      expanded[slot] = (typeof val === 'number' || val === null) ? val : null;
+    }
+    raw = { ...raw, slots: expanded };
+  }
+  if (locks && typeof locks === 'object') {
+    const expanded: Record<string, boolean> = {};
+    for (const [key, val] of Object.entries(locks)) {
+      const slot = SLOT_LONG[key] ?? key;
+      expanded[slot] = Boolean(val);
+    }
+    raw = { ...raw, locks: expanded };
+  }
+  if (level !== undefined) raw = { ...raw, level };
+  if (characterClass !== undefined) raw = { ...raw, characterClass };
+  if (legacyHash !== undefined) raw = { ...raw, legacyHash };
+  if (selectedSlot !== undefined) raw = { ...raw, selectedSlot: selectedSlot as string };
+  if (binsByCategory !== undefined) raw = { ...raw, binsByCategory };
+  return raw;
+}
+
 export function parseWorkbenchPatchFromUrl(url: URL): Partial<WorkbenchSnapshot> | null {
   const wb = url.searchParams.get('wb');
   if (!wb) return null;
   try {
-    const decoded = base64UrlDecode(wb);
-    const parsed = wbUrlSnapshotSchema.parse(JSON.parse(decoded));
+    const decoded = decodeParam(wb);
+    if (!decoded) return null;
+    const raw = JSON.parse(decoded) as Record<string, unknown>;
+    const normalized = normalizeWbPayload(raw);
+    const parsed = wbUrlSnapshotSchema.parse(normalized);
     const slots = Object.fromEntries(
       ITEM_SLOTS.map((slot) => [slot, parsed.slots?.[slot] ?? null]),
     ) as WorkbenchSnapshot['slots'];
@@ -133,6 +196,7 @@ export function parseWorkbenchPatchFromUrl(url: URL): Partial<WorkbenchSnapshot>
     const locks = Object.fromEntries(
       ITEM_SLOTS.map((slot) => [slot, Boolean(parsed.locks?.[slot])]),
     ) as WorkbenchSnapshot['locks'];
+
     return {
       slots,
       binsByCategory,
@@ -151,8 +215,13 @@ export function parseAbilityTreeStateFromUrl(url: URL): AbilityTreeUrlState | nu
   const raw = url.searchParams.get('atree');
   if (!raw) return null;
   try {
-    const decoded = base64UrlDecode(raw);
-    const parsed = atreeUrlStateSchema.parse(JSON.parse(decoded));
+    const decoded = decodeParam(raw);
+    if (!decoded) return null;
+    const atreeRaw = JSON.parse(decoded) as Record<string, unknown>;
+    const parsed = atreeUrlStateSchema.parse({
+      version: atreeRaw.v ?? atreeRaw.version,
+      selectedByClass: atreeRaw.s ?? atreeRaw.selectedByClass,
+    });
     return {
       version: parsed.version ?? null,
       selectedByClass: parsed.selectedByClass,
@@ -175,15 +244,24 @@ export function parseUrlState(locationLike: Location = window.location): ParsedW
 }
 
 export function encodeWorkbenchSnapshot(snapshot: WorkbenchSnapshot): string {
-  // Minimal build payload for shareable URLs: slots, locks, level, class. Bins omitted to keep URLs short.
+  // Compact payload with short keys + LZ compression (like legacy). Bins omitted.
+  const s: Record<string, number | null> = {};
+  for (const [slot, id] of Object.entries(snapshot.slots)) {
+    const key = SLOT_SHORT[slot] ?? slot;
+    s[key] = id;
+  }
+  const k: Record<string, boolean> = {};
+  for (const [slot, v] of Object.entries(snapshot.locks)) {
+    if (v) k[SLOT_SHORT[slot] ?? slot] = true;
+  }
   const payload = {
-    slots: snapshot.slots,
-    locks: snapshot.locks,
-    level: snapshot.level,
-    characterClass: snapshot.characterClass,
-    legacyHash: snapshot.legacyHash,
+    s,
+    k: Object.keys(k).length > 0 ? k : undefined,
+    l: snapshot.level,
+    c: snapshot.characterClass,
+    h: snapshot.legacyHash,
   };
-  return base64UrlEncode(JSON.stringify(payload));
+  return encodeParam(JSON.stringify(payload));
 }
 
 export function writeUrlState(args: {
@@ -203,10 +281,10 @@ export function writeUrlState(args: {
   if (args.abilityTreeState && Object.keys(args.abilityTreeState.selectedByClass ?? {}).length > 0) {
     params.set(
       'atree',
-      base64UrlEncode(
+      encodeParam(
         JSON.stringify({
-          version: args.abilityTreeState.version ?? null,
-          selectedByClass: args.abilityTreeState.selectedByClass,
+          v: args.abilityTreeState.version ?? null,
+          s: args.abilityTreeState.selectedByClass,
         }),
       ),
     );
