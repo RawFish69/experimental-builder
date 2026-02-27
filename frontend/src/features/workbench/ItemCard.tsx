@@ -124,14 +124,18 @@ function formatDamageLines(item: NormalizedItem): string | null {
   return pairs.map(([label, value]) => `${label}: ${value}`).join('  ');
 }
 
-/** IDs to exclude from full display (derived/aggregate, not raw identifications) */
-const DERIVED_IDS = new Set(['reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore', 'sumSpPct', 'sumSpRaw']);
+/** IDs to exclude from chips (shown once at top: Req + SP) or derived/aggregate */
+const EXCLUDED_ID_CHIPS = new Set([
+  'reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore', 'sumSpPct', 'sumSpRaw',
+  'strReq', 'dexReq', 'intReq', 'defReq', 'agiReq',  // Req shown at top
+  'str', 'dex', 'int', 'def', 'agi',                  // SP bonus shown at top
+]);
 
 /** All identifications with non-zero values, sorted by label. */
 function allIdentifications(item: NormalizedItem): Array<{ key: string; value: number }> {
   const entries: Array<{ key: string; value: number }> = [];
   for (const [key, value] of Object.entries(item.numericIndex)) {
-    if (DERIVED_IDS.has(key)) continue;
+    if (EXCLUDED_ID_CHIPS.has(key)) continue;
     const num = typeof value === 'number' ? value : 0;
     if (num !== 0) entries.push({ key, value: num });
   }
