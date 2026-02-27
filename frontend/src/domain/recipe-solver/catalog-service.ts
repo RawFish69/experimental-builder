@@ -190,17 +190,22 @@ export class RecipeCatalogService {
   }
 
   private async load(): Promise<RecipeCatalogSnapshot> {
+    const resolve = (path: string) => {
+      if (typeof window === 'undefined') return path;
+      const base = window.location.href.split('?')[0].replace(/\/[^/]*$/, '/') || window.location.origin + '/';
+      return new URL(path, base).href;
+    };
     const recipePaths = [
+      resolve('recipes_compress.json'),
       './recipes_compress.json',
       '../recipes_compress.json',
-      '/workbench/recipes_compress.json',
-      '/recipes_compress.json',
+      'recipes_compress.json',
     ];
     const ingredPaths = [
+      resolve('ingreds_compress.json'),
       './ingreds_compress.json',
       '../ingreds_compress.json',
-      '/workbench/ingreds_compress.json',
-      '/ingreds_compress.json',
+      'ingreds_compress.json',
     ];
 
     const [recipesPayload, ingredsRaw] = await Promise.all([

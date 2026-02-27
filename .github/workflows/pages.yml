@@ -35,19 +35,14 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Build workbench
+      - name: Build
         working-directory: frontend
         run: npm run build
 
       - name: Prepare Pages artifact
         run: |
           mkdir -p _site
-          rsync -a \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='_site' \
-            --exclude='frontend/node_modules' \
-            . ./_site/
+          cp -r dist/* _site/
           touch _site/.nojekyll
 
       - name: Upload Pages artifact

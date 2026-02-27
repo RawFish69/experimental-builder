@@ -7,11 +7,11 @@ import fsp from 'node:fs/promises'
 
 function compressJsonBridgePlugin() {
   const sourceFile = path.resolve(__dirname, '../compress.json')
-  const routeMatchers = new Set(['/compress.json', '/workbench/compress.json'])
+  const routeMatchers = new Set(['/compress.json'])
   const spriteSourceFile = path.resolve(__dirname, '../media/items/new.png')
-  const spriteRouteMatchers = new Set(['/media/items/new.png', '/workbench/media/items/new.png'])
+  const spriteRouteMatchers = new Set(['/media/items/new.png'])
   const latestAtreeVersion = '2.1.6.0'
-  const atreeRoutePattern = /^\/(?:workbench\/)?data\/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/atree\.json$/
+  const atreeRoutePattern = /^\/data\/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/atree\.json$/
 
   async function serveJsonFile(res: import('node:http').ServerResponse, filePath: string, kind: string) {
     try {
@@ -68,21 +68,22 @@ function compressJsonBridgePlugin() {
       })
     },
     async closeBundle() {
-      const outFile = path.resolve(__dirname, '../workbench/compress.json')
+      const outDir = path.resolve(__dirname, '../dist')
+      const outFile = path.join(outDir, 'compress.json')
       if (!fs.existsSync(sourceFile)) return
       await fsp.copyFile(sourceFile, outFile)
       if (fs.existsSync(spriteSourceFile)) {
-        const spriteOutDir = path.resolve(__dirname, '../workbench/media/items')
+        const spriteOutDir = path.join(outDir, 'media/items')
         await fsp.mkdir(spriteOutDir, { recursive: true })
         await fsp.copyFile(spriteSourceFile, path.join(spriteOutDir, 'new.png'))
       }
       const atreeSourceFile = path.resolve(__dirname, `../data/${latestAtreeVersion}/atree.json`)
       if (fs.existsSync(atreeSourceFile)) {
-        const atreeOutDir = path.resolve(__dirname, `../workbench/data/${latestAtreeVersion}`)
+        const atreeOutDir = path.join(outDir, `data/${latestAtreeVersion}`)
         await fsp.mkdir(atreeOutDir, { recursive: true })
         await fsp.copyFile(atreeSourceFile, path.join(atreeOutDir, 'atree.json'))
       }
-      const assetsDir = path.resolve(__dirname, '../workbench/assets')
+      const assetsDir = path.join(outDir, 'assets')
       if (fs.existsSync(assetsDir)) {
         const files = await fsp.readdir(assetsDir)
         await Promise.all(
@@ -104,7 +105,7 @@ export default defineConfig(({ command }) => ({
     },
   },
   build: {
-    outDir: '../workbench',
+    outDir: '../dist',
     emptyOutDir: true,
     sourcemap: false,
   },

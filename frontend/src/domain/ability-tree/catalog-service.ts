@@ -44,12 +44,16 @@ export class AbilityTreeCatalogService {
   }
 
   private buildUrls(version: string): string[] {
+    const resolve = (path: string) => {
+      if (typeof window === 'undefined') return path;
+      const base = window.location.href.split('?')[0].replace(/\/[^/]*$/, '/') || window.location.origin + '/';
+      return new URL(path, base).href;
+    };
     return [
+      resolve(`data/${version}/atree.json`),
       `./data/${version}/atree.json`,
       `../data/${version}/atree.json`,
       `data/${version}/atree.json`,
-      `/workbench/data/${version}/atree.json`,
-      `/data/${version}/atree.json`,
     ];
   }
 }
