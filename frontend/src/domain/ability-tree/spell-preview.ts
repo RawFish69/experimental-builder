@@ -98,6 +98,8 @@ interface WeaponLegacyLite {
   damagePresent: boolean[];
 }
 
+type DamageElementId = (typeof DAMAGE_ELEMENTS)[number];
+
 interface SpellDamagePartResult {
   type: 'damage' | 'heal';
   name: string;
@@ -108,6 +110,7 @@ interface SpellDamagePartResult {
   normalTotal?: [number, number];
   critTotal?: [number, number];
   healAmount?: number;
+  dominantElement?: DamageElementId;
 }
 
 export interface WorkbenchSpellSummary {
@@ -117,6 +120,8 @@ export interface WorkbenchSpellSummary {
   averageDisplayValue: number;
   isHealing: boolean;
   manaCost: number | null;
+   // dominant element for display (n/e/t/w/f/a), null for pure neutral or healing
+  dominantElement: DamageElementId | null;
   parts: SpellDamagePartResult[];
 }
 
@@ -783,6 +788,7 @@ function evaluateSpellParts(spell: LegacySpell, stats: LegacyStatsLite, weapon: 
         display: part.display !== false,
         normal_total: calc[0],
         crit_total: calc[1],
+        damage_results: calc[2],
       };
     } else if ('power' in part) {
       const healBase = stats.getNum('hp');
@@ -828,6 +834,20 @@ function evaluateSpellParts(spell: LegacySpell, stats: LegacyStatsLite, weapon: 
     if (res.type === 'damage') {
       const avgNonCrit = (res.normal_total[0] + res.normal_total[1]) / 2;
       const avgCrit = (res.crit_total[0] + res.crit_total[1]) / 2;
+      let dominantElement: DamageElementId | undefined;
+      if (Array.isArray((res as unknown as { damage_results?: number[][] }).damage_results)) {
+        const damageResults = (res as unknown as { damage_results: number[][] }).damage_results;
+        let best = 0;
+        for (let i = 1; i < DAMAGE_ELEMENTS.length; i++) {
+          const elem = damageResults[i];
+          if (!elem) continue;
+          const avgElem = (elem[0] + elem[1]) / 2;
+          if (avgElem > best) {
+            best = avgElem;
+            dominantElement = DAMAGE_ELEMENTS[i];
+          }
+        }
+      }
       outputs.push({
         type: 'damage',
         name: res.name,
@@ -837,6 +857,7 @@ function evaluateSpellParts(spell: LegacySpell, stats: LegacyStatsLite, weapon: 
         averageNonCrit: avgNonCrit,
         averageCrit: avgCrit,
         averageTotal: (1 - critChance) * avgNonCrit + critChance * avgCrit,
+        dominantElement,
       });
     } else {
       outputs.push({
@@ -929,6 +950,7 @@ export function buildWorkbenchSpellPreview(params: {
       parts[0];
     if (!displayPart) continue;
     const isHealing = displayPart.type === 'heal';
+    const dominantElement = !isHealing ? displayPart.dominantElement ?? null : null;
     summaries.push({
       baseSpell: spell.base_spell,
       name: spell.name,
@@ -936,6 +958,7 @@ export function buildWorkbenchSpellPreview(params: {
       averageDisplayValue: displayPart.averageTotal ?? 0,
       isHealing,
       manaCost: getSpellCostLite(stats, spell),
+      dominantElement,
       parts,
     });
   }

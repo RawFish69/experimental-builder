@@ -207,6 +207,28 @@ export function WorkbenchBoard(props: {
     [],
   );
 
+  const comparePreview = props.store.comparePreview;
+  let focusedItemForBoard: { itemId: number; source: string } | null = null;
+  if (comparePreview?.itemId != null && comparePreview.slot) {
+    focusedItemForBoard = {
+      itemId: comparePreview.itemId,
+      source: `Compare Preview • ${slotLabel(comparePreview.slot)}`,
+    };
+  } else if (props.store.selectedSlot) {
+    const selectedId = props.store.slots[props.store.selectedSlot];
+    if (selectedId != null) {
+      focusedItemForBoard = {
+        itemId: selectedId,
+        source: `Selected Slot • ${slotLabel(props.store.selectedSlot)}`,
+      };
+    }
+  } else if (props.store.slots.weapon != null) {
+    focusedItemForBoard = {
+      itemId: props.store.slots.weapon,
+      source: 'Equipped Weapon',
+    };
+  }
+
   return (
     <Panel
       className="flex min-h-0 flex-col"
@@ -265,6 +287,22 @@ export function WorkbenchBoard(props: {
                 onHoverItem={props.onHoverItem}
               />
             </div>
+            {focusedItemForBoard ? (
+              <div className="wb-card p-2.5">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div>
+                    <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Focused Item</div>
+                    <div className="text-xs text-[var(--wb-muted)]">{focusedItemForBoard.source}</div>
+                  </div>
+                </div>
+                {(() => {
+                  const item = props.catalog.itemsById.get(focusedItemForBoard!.itemId);
+                  return item ? (
+                    <ItemCard item={item} compact dense showDetails={showItemDetails} />
+                  ) : null;
+                })()}
+              </div>
+            ) : null}
           </div>
         </div>
 

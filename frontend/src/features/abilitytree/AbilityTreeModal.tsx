@@ -181,27 +181,26 @@ export function AbilityTreeModal(props: {
               className="min-h-0"
             >
               <ScrollArea className="max-h-[52vh] p-3">
-                <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/15 p-2">
+                <div className="atree-grid-container rounded-xl border border-[var(--wb-border-muted)] p-2">
                   <div className="grid gap-2" style={gridStyles}>
                     {tree.nodes.map((node) => {
                       const status = evaluation.nodeStatusById[node.id];
                       const active = Boolean(status?.active);
                       const selectable = Boolean(status?.selectable);
                       const hardBlocked = Boolean(status?.hardBlocked);
+                      const stateClass =
+                        active
+                          ? 'atree-node--active'
+                          : selectable
+                            ? 'atree-node--selectable'
+                            : hardBlocked
+                              ? 'atree-node--blocked'
+                              : 'atree-node--default';
                       return (
                         <button
                           key={node.id}
                           type="button"
-                          className={[
-                            'rounded-xl border p-2 text-left transition',
-                            active
-                              ? 'border-cyan-300/40 bg-cyan-300/12 shadow-[0_0_0_1px_rgba(34,211,238,.15)]'
-                              : selectable
-                                ? 'border-emerald-400/30 bg-emerald-400/7 hover:bg-emerald-400/12'
-                                : hardBlocked
-                                  ? 'border-rose-400/25 bg-rose-400/7'
-                                  : 'border-[var(--wb-border-muted)] bg-black/15',
-                          ].join(' ')}
+                          className={`atree-node ${stateClass}`}
                           style={{
                             gridColumnStart: node.display.col + 1,
                             gridRowStart: node.display.row + 1,

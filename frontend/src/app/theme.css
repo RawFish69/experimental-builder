@@ -372,6 +372,45 @@ a {
   color: var(--wb-info);
 }
 
+.spell-elem-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.spell-elem-e {
+  border: 1px solid var(--wb-success-border);
+  background: var(--wb-success-soft);
+  color: var(--wb-success);
+}
+
+.spell-elem-t {
+  border: 1px solid var(--wb-warn-border);
+  background: var(--wb-warn-soft);
+  color: var(--wb-warn);
+}
+
+.spell-elem-w {
+  border: 1px solid var(--wb-info-border);
+  background: var(--wb-info-soft);
+  color: var(--wb-info);
+}
+
+.spell-elem-f {
+  border: 1px solid var(--wb-danger-border);
+  background: var(--wb-danger-soft);
+  color: var(--wb-danger);
+}
+
+.spell-elem-a {
+  border: 1px solid rgba(118, 71, 156, 0.5);
+  background: rgba(118, 71, 156, 0.12);
+  color: var(--wb-tier-mythic);
+}
+
 .wb-card {
   border: 1px solid var(--wb-border-muted);
   border-radius: 14px;
@@ -515,6 +554,69 @@ a {
   border-color: var(--wb-border-muted);
   background: var(--wb-surface-soft);
   color: var(--wb-text);
+}
+
+/* Ability tree node states - theme-aware, high contrast for selected vs unselected */
+.atree-grid-container {
+  background: var(--wb-surface-strong);
+}
+
+.atree-node {
+  border-radius: 12px;
+  border-width: 2px;
+  border-style: solid;
+  padding: 0.5rem;
+  text-align: left;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.atree-node--active {
+  border-color: var(--wb-accent);
+  background: var(--wb-accent-soft);
+  box-shadow: 0 0 0 1px var(--wb-accent-border);
+}
+
+.atree-node--selectable {
+  border-color: var(--wb-success-border);
+  background: var(--wb-success-soft);
+}
+
+.atree-node--selectable:hover {
+  background: var(--wb-success-soft);
+  border-color: var(--wb-success);
+  box-shadow: 0 0 0 1px var(--wb-success-border);
+}
+
+.atree-node--blocked {
+  border-color: var(--wb-danger-border);
+  background: var(--wb-danger-soft);
+  cursor: not-allowed;
+}
+
+.atree-node--default {
+  border-color: var(--wb-border-muted);
+  background: var(--wb-surface-soft);
+}
+
+/* Minimal theme: boost contrast for selected nodes */
+:root[data-wb-theme='minimal'] .atree-node--active,
+:root:not([data-wb-theme]) .atree-node--active {
+  border-color: var(--wb-accent);
+  background: rgba(38, 75, 95, 0.18);
+  box-shadow: 0 0 0 2px rgba(38, 75, 95, 0.25);
+}
+
+:root[data-wb-theme='minimal'] .atree-node--selectable,
+:root:not([data-wb-theme]) .atree-node--selectable {
+  border-color: var(--wb-success);
+  background: rgba(47, 109, 86, 0.14);
+}
+
+:root[data-wb-theme='minimal'] .atree-node--selectable:hover,
+:root:not([data-wb-theme]) .atree-node--selectable:hover {
+  background: rgba(47, 109, 86, 0.22);
+  border-color: var(--wb-success);
 }
 
 .wb-text-success {

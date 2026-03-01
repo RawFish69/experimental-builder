@@ -3,12 +3,6 @@ A web app for building and optimizing Wynncraft character loadouts using the Wor
 
 ## Layout 
 
-### Legacy app 
-- `builder/` - legacy builder (ability tree, legacy workflows)
-- `items/`, `items_adv/` - legacy item search pages
-- `crafter/`, `custom/`, `map/`, `wynnfo/`, etc. - legacy static pages/tools
-- `js/`, `css/`, `media/`, `thirdparty/` - shared legacy web assets and scripts
-
 ### New Workbench + Build Solver app
 - `frontend/` - source code (React + TypeScript + Vite)
 - `dist/` - built static output for the site root `/`
@@ -44,12 +38,16 @@ cd frontend
 npm.cmd run build
 ```
 
+## Legacy
+
+The original Wynnbuilder static site and tools (builder, items, crafter, custom, map, wynnfo, etc.) are preserved under the `legacy/` folder for archival and backwards-compatibility purposes.
+
 ## Credit
 
-This work builds on the original Wynnbuilder project and the people who made and maintained it.
+This work builds on prior community projects and the broader Wynncraft ecosystem:
 
-- Original Wynnbuilder maintainers and contributors
-- Additional contributor credits: `docs/CREDITS.txt`
-- Wynncraft / game ecosystem credit belongs to the Wynncraft community and creators
+- **Wynnbuilder team**: Original Wynnbuilder maintainers and contributors (see additional contributor credits in `docs/CREDITS.txt`).
+- **Wynnmana**: Mana sustain and spell–mana reference from [`wynnmana/wynnmana.github.io`](https://github.com/wynnmana/wynnmana.github.io).
+- **Wynncraft**: Game, content, and universe credit belongs to the Wynncraft creators and community.
 
 If you are somehow using this repo, keep that credit intact.

@@ -1,54 +1,14 @@
-import { useState } from 'react';
 import { ExternalLink, Link2 } from 'lucide-react';
-import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
+import type { CatalogSnapshot } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
 import { slotLabel } from '@/domain/items/types';
 import { diffBuildSummary } from '@/domain/build/build-metrics';
 import { Button, KpiTile, Panel, ScrollArea } from '@/components/ui';
-import { ItemCard } from '@/features/workbench/ItemCard';
+import { ManaSustainPanel } from '@/features/workbench/ManaSustainPanel';
 import type { WorkbenchSpellPreviewResult } from '@/domain/ability-tree/spell-preview';
 
 function fmt(n: number): string {
   return Number.isFinite(n) ? Math.round(n).toLocaleString() : '-';
-}
-
-function getWeaponItem(props: {
-  catalog: CatalogSnapshot;
-  snapshot: WorkbenchSnapshot;
-}) {
-  const weaponId = props.snapshot.slots.weapon;
-  if (weaponId == null) return null;
-  return props.catalog.itemsById.get(weaponId) ?? null;
-}
-
-function getFocusedItem(props: {
-  catalog: CatalogSnapshot;
-  snapshot: WorkbenchSnapshot;
-}): { item: NormalizedItem; source: string } | null {
-  const preview = props.snapshot.comparePreview;
-  if (preview.itemId != null) {
-    const item = props.catalog.itemsById.get(preview.itemId);
-    if (item) {
-      const source = preview.slot ? `Compare Preview • ${slotLabel(preview.slot)}` : 'Compare Preview';
-      return { item, source };
-    }
-  }
-
-  if (props.snapshot.selectedSlot) {
-    const selectedId = props.snapshot.slots[props.snapshot.selectedSlot];
-    if (selectedId != null) {
-      const item = props.catalog.itemsById.get(selectedId);
-      if (item) {
-        return { item, source: `Selected Slot • ${slotLabel(props.snapshot.selectedSlot)}` };
-      }
-    }
-  }
-
-  const weapon = getWeaponItem(props);
-  if (weapon) {
-    return { item: weapon, source: 'Equipped Weapon' };
-  }
-  return null;
 }
 
 export interface SummaryActions {
@@ -75,10 +35,8 @@ export function BuildSummaryPanel(props: {
   spellPreview?: WorkbenchSpellPreviewResult | null;
   actions: SummaryActions;
 }) {
-  const [showFocusedItemDetails, setShowFocusedItemDetails] = useState(false);
   const delta = props.compareSummary ? diffBuildSummary(props.summary, props.compareSummary) : null;
   const meleePreview = props.spellPreview?.melee ?? null;
-  const focusedItem = getFocusedItem(props);
 
   return (
     <Panel
@@ -87,40 +45,6 @@ export function BuildSummaryPanel(props: {
       headerRight={null}
     >
       <div className="flex flex-col gap-3 p-3">
-        {focusedItem ? (
-          <div className="wb-card p-2.5">
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <div>
-                <div className="text-xs uppercase tracking-wide text-[var(--wb-muted)]">Focused Item</div>
-                <div className="text-xs text-[var(--wb-muted)]">{focusedItem.source}</div>
-              </div>
-              <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => setShowFocusedItemDetails((prev) => !prev)}>
-                {showFocusedItemDetails ? 'Hide Stats' : 'Show Stats'}
-              </Button>
-            </div>
-            <ItemCard item={focusedItem.item} compact dense showDetails={showFocusedItemDetails} />
-          </div>
-        ) : (
-          <div className="wb-surface rounded-xl p-3 text-xs text-[var(--wb-muted)]">
-            Select or hover an item to inspect it here.
-          </div>
-        )}
-
-        {props.abilityTreeSummary ? (
-          <div className="wb-banner p-3 text-xs" data-tone={props.abilityTreeSummary.hasErrors ? 'warning' : 'success'}>
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <div className="font-semibold">Ability Tree ({props.abilityTreeSummary.className})</div>
-              <Button variant="ghost" className="px-2 py-1 text-xs" onClick={props.actions.onOpenAbilityTree}>
-                Edit
-              </Button>
-            </div>
-            <div>
-              AP {props.abilityTreeSummary.apUsed}/{props.abilityTreeSummary.apCap} • {props.abilityTreeSummary.selectedCount} abilities selected
-            </div>
-            {props.abilityTreeSummary.hasErrors ? <div className="mt-1">Tree has validation issues (dependencies/blockers/AP).</div> : null}
-          </div>
-        ) : null}
-
         <div className="wb-card p-3">
           <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Melee DPS</div>
           <div className="mt-1 flex items-end justify-between gap-2">
@@ -139,6 +63,8 @@ export function BuildSummaryPanel(props: {
             • Melee % / Raw <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleePct)}</span> / <span className="wb-text-offense">{fmt(props.summary.aggregated.offense.meleeRaw)}</span>
           </div>
         </div>
+
+        <ManaSustainPanel spellPreview={props.spellPreview ?? null} summary={props.summary} />
 
         {props.spellPreview ? (
           <div className="wb-card p-3">
@@ -161,9 +87,26 @@ export function BuildSummaryPanel(props: {
                   {props.spellPreview.spells.map((spell) => (
                     <div key={`${spell.baseSpell}-${spell.name}`} className="wb-surface rounded-lg p-2">
                       <div className="flex items-center justify-between gap-2 text-xs">
-                        <div className="font-semibold">
-                          {spell.name}
-                          <span className="ml-1 text-[var(--wb-muted)]">({spell.displayPartName})</span>
+                        <div className="flex items-center gap-2 font-semibold">
+                          <span>
+                            {spell.name}
+                            <span className="ml-1 text-[var(--wb-muted)]">({spell.displayPartName})</span>
+                          </span>
+                          {!spell.isHealing && spell.dominantElement && spell.dominantElement !== 'n' ? (
+                            <span className={`spell-elem-chip spell-elem-${spell.dominantElement}`}>
+                              {spell.dominantElement === 'e'
+                                ? 'Earth'
+                                : spell.dominantElement === 't'
+                                  ? 'Thunder'
+                                  : spell.dominantElement === 'w'
+                                    ? 'Water'
+                                    : spell.dominantElement === 'f'
+                                      ? 'Fire'
+                                      : spell.dominantElement === 'a'
+                                        ? 'Air'
+                                        : ''}
+                            </span>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <div className={spell.isHealing ? 'wb-text-defense' : 'wb-text-offense'}>

@@ -6,8 +6,20 @@ export function normalizeHash(hash: string | null | undefined): string | null {
 
 export function getLegacyBuilderUrl(hash?: string | null): string {
   const clean = normalizeHash(hash);
-  const base = typeof window !== 'undefined'
-    ? new URL('builder/', window.location.href).href
-    : 'builder/';
+  if (typeof window === 'undefined') {
+    const base = 'legacy/builder/';
+    return clean ? `${base}#${clean}` : base;
+  }
+
+  const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+  // In local dev, there is no bundled legacy site – open the upstream Wynnbuilder instead.
+  if (isDev) {
+    const base = 'https://hppeng-wynn.github.io/builder/';
+    return clean ? `${base}#${clean}` : base;
+  }
+
+  // On the deployed site, use the archived legacy copy under /legacy/builder/.
+  const base = new URL('legacy/builder/', window.location.href).href;
   return clean ? `${base}#${clean}` : base;
 }
