@@ -7,7 +7,7 @@ export function normalizeHash(hash: string | null | undefined): string | null {
 export function getLegacyBuilderUrl(hash?: string | null): string {
   const clean = normalizeHash(hash);
   if (typeof window === 'undefined') {
-    const base = 'legacy/builder/';
+    const base = 'builder/';
     return clean ? `${base}#${clean}` : base;
   }
 
@@ -19,7 +19,7 @@ export function getLegacyBuilderUrl(hash?: string | null): string {
     return clean ? `${base}#${clean}` : base;
   }
 
-  // On the deployed site, use the archived legacy copy under /legacy/builder/.
-  const base = new URL('legacy/builder/', window.location.href).href;
+  // On the deployed site, use the legacy-compatible builder under /builder/.
+  const base = new URL('builder/', window.location.href).href;
   return clean ? `${base}#${clean}` : base;
 }

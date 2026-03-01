@@ -54,11 +54,18 @@ jobs:
             fi
           done
 
-          # Legacy site (builder, old tools, static pages) lives under /legacy
-          if [ -e "legacy" ]; then
-            cp -r "legacy" "_site/"
+          # Legacy Wynnbuilder site (builder, items, css, js, etc.) now lives under legacy/
+          # Recreate the original layout at the site root so absolute paths like /css and /thirdparty still work.
+          if [ -d "legacy" ]; then
+            for dir in atlas builder crafter custom css ingredients ingredients_adv item items items_adv js map sets thirdparty wynnfo; do
+              if [ -e "legacy/$dir" ]; then
+                cp -r "legacy/$dir" "_site/$dir"
+              else
+                echo "Skipping missing legacy subdir: legacy/$dir"
+              fi
+            done
           else
-            echo "Skipping missing legacy directory"
+            echo "Skipping legacy export; legacy/ not found"
           fi
 
           for file in clean.json compress.json dps_data.json ingreds_clean.json ingreds_compress.json items_compress.json LICENSE.txt manifest.json maploc_clean.json maploc_compress.json recipes.json recipes_clean.json recipes_compress.json skillpoints.csv terrs_clean.json terrs_compress.json tomes.json tome_map.json; do

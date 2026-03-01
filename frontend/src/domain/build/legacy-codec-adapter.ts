@@ -59,7 +59,7 @@ class IframeLegacyCodecAdapter implements LegacyCodecAdapter {
     iframe.style.width = '1200px';
     iframe.style.height = '900px';
     iframe.style.opacity = '0';
-    iframe.src = `../legacy/builder/#${hash}`;
+    iframe.src = `../builder/#${hash}`;
     document.body.appendChild(iframe);
 
     const timeoutMs = 30000;
