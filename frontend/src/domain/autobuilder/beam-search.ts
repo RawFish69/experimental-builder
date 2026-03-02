@@ -1413,9 +1413,14 @@ function finalizeBeamCandidates(params: {
         const key = canonicalCandidateKey(node.slots);
         if (!seenLooserKeys.has(key)) {
           seenLooserKeys.add(key);
-          const { score, breakdown } = scoreSummary(summary, constraints.weights, constraints, {
-            skipThresholdPenalty: true,
-          });
+          // For looser candidates, downweight raw EHP so damage / target stats
+          // dominate ranking instead of just huge HP.
+          const looserWeights = {
+            ...constraints.weights,
+            legacyEhp: 0,
+            ehpProxy: 0,
+          };
+          const { score, breakdown } = scoreSummary(summary, looserWeights, constraints, { skipThresholdPenalty: true });
           const reasons: string[] = [
             'Fails skill-point / equip-order feasibility in current SP mode (even with best ordering).',
           ];
@@ -1465,9 +1470,12 @@ function finalizeBeamCandidates(params: {
         const key = canonicalCandidateKey(node.slots);
         if (!seenLooserKeys.has(key)) {
           seenLooserKeys.add(key);
-          const { score, breakdown } = scoreSummary(summary, constraints.weights, constraints, {
-            skipThresholdPenalty: true,
-          });
+          const looserWeights = {
+            ...constraints.weights,
+            legacyEhp: 0,
+            ehpProxy: 0,
+          };
+          const { score, breakdown } = scoreSummary(summary, looserWeights, constraints, { skipThresholdPenalty: true });
           const reasons: string[] = [];
           if (hardCheck.reason === 'attackSpeed') {
             reasons.push('Fails final attack-speed target under current constraints.');
