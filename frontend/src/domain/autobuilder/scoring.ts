@@ -46,17 +46,66 @@ export function computeThresholdPenalty(summary: BuildSummary, constraints: Auto
   return penalty;
 }
 
+/**
+ * Compute how much the build's aggregated stats satisfy customNumericRanges targets.
+ *
+ * Each custom-min range contributes a positive score proportional to the build's
+ * actual value for that stat (not just whether it passes the threshold). This ensures
+ * builds that are *more* over the threshold are ranked higher, which keeps the final
+ * scoring aligned with what the beam search was optimizing for.
+ *
+ * Each custom-max range subtracts score for any value above the threshold, rewarding
+ * builds that keep that stat low.
+ */
+export function computeCustomRangeScore(summary: BuildSummary, constraints: AutoBuildConstraints): number {
+  const ranges = constraints.target.customNumericRanges ?? [];
+  if (ranges.length === 0) return 0;
+
+  // Weight per unit of stat value — chosen to be meaningful relative to the base score
+  // components (legacyBaseDps × 1 ≈ 1000–4000, ehpProxy × 0.6 ≈ 300–1200).
+  // Using 8 per unit means a stat like +mr=3 contributes 24, comparable to sustain bonus.
+  const MIN_SCORE_PER_UNIT = 8;
+  const MAX_PENALTY_PER_UNIT = 4;
+
+  let score = 0;
+  for (const range of ranges) {
+    const key = range.key?.trim();
+    if (!key) continue;
+    // Look up in the build's aggregated/derived stats by key
+    const agg = summary.aggregated as unknown as Record<string, number>;
+    const der = summary.derived as unknown as Record<string, number>;
+    const v: number = agg[key] ?? der[key] ?? 0;
+    if (typeof range.min === 'number') {
+      score += v * MIN_SCORE_PER_UNIT;
+    }
+    if (typeof range.max === 'number' && v > range.max) {
+      score -= (v - range.max) * MAX_PENALTY_PER_UNIT;
+    }
+  }
+  return score;
+}
+
 export function scoreSummary(summary: BuildSummary, weights: AutoBuilderWeights, constraints: AutoBuildConstraints): { score: number; breakdown: AutoBuildScoreBreakdown } {
   const sustain = computeSustain(summary);
   const reqPenalty = summary.derived.reqTotal * weights.reqTotalPenalty;
   const thresholdPenalty = computeThresholdPenalty(summary, constraints);
+
+  // When the user has specific ID targets, scale back the generic EHP/DPS signals in
+  // final scoring to match how roughItemScore already de-emphasises them during beam search.
+  const customMinCount = (constraints.target.customNumericRanges ?? []).filter(
+    (r) => typeof r.min === 'number',
+  ).length;
+  const genericScale = customMinCount > 0 ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
+
+  const customRangeScore = computeCustomRangeScore(summary, constraints);
+
   const breakdown: AutoBuildScoreBreakdown = {
-    legacyBaseDps: summary.derived.legacyBaseDps * weights.legacyBaseDps,
-    legacyEhp: summary.derived.legacyEhp * weights.legacyEhp,
-    dpsProxy: summary.derived.dpsProxy * weights.dpsProxy,
-    spellProxy: summary.derived.spellProxy * weights.spellProxy,
-    meleeProxy: summary.derived.meleeProxy * weights.meleeProxy,
-    ehpProxy: summary.derived.ehpProxy * weights.ehpProxy,
+    legacyBaseDps: summary.derived.legacyBaseDps * weights.legacyBaseDps * genericScale,
+    legacyEhp: summary.derived.legacyEhp * weights.legacyEhp * genericScale,
+    dpsProxy: summary.derived.dpsProxy * weights.dpsProxy * genericScale,
+    spellProxy: summary.derived.spellProxy * weights.spellProxy * genericScale,
+    meleeProxy: summary.derived.meleeProxy * weights.meleeProxy * genericScale,
+    ehpProxy: summary.derived.ehpProxy * weights.ehpProxy * genericScale,
     speed: summary.aggregated.speed * weights.speed,
     sustain: sustain * weights.sustain,
     skillPointTotal: summary.derived.skillPointTotal * weights.skillPointTotal,
@@ -72,7 +121,8 @@ export function scoreSummary(summary: BuildSummary, weights: AutoBuilderWeights,
     breakdown.ehpProxy +
     breakdown.speed +
     breakdown.sustain +
-    breakdown.skillPointTotal -
+    breakdown.skillPointTotal +
+    customRangeScore -
     breakdown.reqPenalty -
     breakdown.thresholdPenalty;
   return { score, breakdown };

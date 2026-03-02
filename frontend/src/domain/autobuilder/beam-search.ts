@@ -523,18 +523,28 @@ const CUSTOM_RANGE_MAX_WEIGHT = 2;
 const CUSTOM_RANGE_MIN_WEIGHT_STRONG = 14;
 
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
+  const customRanges = constraints.target.customNumericRanges ?? [];
+  const hasCustomMins = customRanges.some((r) => typeof r.min === 'number');
+
+  // When the user has set specific ID minimums, scale back the generic defensive / EHP
+  // contribution so those generic signals don't drown out the user's actual goals.
+  // customScaleFactor → 0 as the number of custom-min constraints grows (min 0.15).
+  const customMinCount = customRanges.filter((r) => typeof r.min === 'number').length;
+  const genericScale = hasCustomMins ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
+
+  // Use only the combined defensive weight (legacyEhp + ehpProxy) on ehpProxy once,
+  // to avoid the double-weighting that was inflating high-HP/def items.
+  const defWeight = (constraints.weights.legacyEhp + constraints.weights.ehpProxy) * genericScale;
+
   let score =
-    item.numeric.baseDps * constraints.weights.legacyBaseDps +
-    item.roughScoreFields.ehpProxy * constraints.weights.legacyEhp +
-    item.roughScoreFields.offense * constraints.weights.dpsProxy +
-    item.roughScoreFields.ehpProxy * constraints.weights.ehpProxy +
+    item.numeric.baseDps * constraints.weights.legacyBaseDps * genericScale +
+    item.roughScoreFields.ehpProxy * defWeight +
+    item.roughScoreFields.offense * constraints.weights.dpsProxy * genericScale +
     item.numeric.spd * constraints.weights.speed +
     item.roughScoreFields.utility * constraints.weights.sustain +
     item.roughScoreFields.skillPointTotal * constraints.weights.skillPointTotal -
     item.roughScoreFields.reqTotal * constraints.weights.reqTotalPenalty;
 
-  const customRanges = constraints.target.customNumericRanges ?? [];
-  const hasCustomMins = customRanges.some((r) => typeof r.min === 'number');
   const minWeight = hasCustomMins ? CUSTOM_RANGE_MIN_WEIGHT_STRONG : CUSTOM_RANGE_MIN_WEIGHT;
   for (const range of customRanges) {
     const key = range.key?.trim();
@@ -1286,7 +1296,7 @@ function finalizeBeamCandidates(params: {
   beam: BeamNode[];
   catalog: CatalogSnapshot;
   constraints: AutoBuildConstraints;
-  skillpointFeasibilityOptions?: Parameters<typeof evaluateBuild>[2]['skillpointFeasibility'] | null;
+  skillpointFeasibilityOptions?: NonNullable<Parameters<typeof evaluateBuild>[2]>['skillpointFeasibility'] | null;
   signal?: AbortSignal;
 }): {
   candidates: AutoBuildCandidate[];
