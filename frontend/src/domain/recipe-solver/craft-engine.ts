@@ -317,9 +317,11 @@ export function encodeCraftHash(
     append(ATK_SPD_MAP[atkSpd] ?? 0, 4);
   }
 
-  // Pad to multiple of 6
+  // Pad to next multiple of 6 — WynnBuilder's encoder always appends 6-(length%6) bits
+  // unconditionally, meaning when already aligned it adds a full 6-bit padding character.
+  // The decoder always consumes those bits, so we must match that behaviour exactly.
   const rem = totalBits % 6;
-  if (rem !== 0) append(0, 6 - rem);
+  append(0, rem === 0 ? 6 : 6 - rem);
 
   // Convert to Base64 (6 bits at a time, LSB = lowest index)
   const B64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-';
