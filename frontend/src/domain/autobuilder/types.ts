@@ -80,6 +80,8 @@ export interface AutoBuildCandidate {
   score: number;
   scoreBreakdown: AutoBuildScoreBreakdown;
   summary: BuildSummary;
+  /** Present only for near-miss candidates: why this build didn't pass exact checks. */
+  nearMissReasons?: string[];
 }
 
 export interface AutoBuildProgressEvent {
@@ -92,6 +94,8 @@ export interface AutoBuildProgressEvent {
   reasonCode?: string;
   /** Optional live preview of best candidates while search is running. */
   previewCandidates?: AutoBuildCandidate[];
+  /** Near-miss candidates that almost passed all checks. Emitted with phase='diagnostics'. */
+  nearMissCandidates?: AutoBuildCandidate[];
 }
 
 export const DEFAULT_AUTO_BUILDER_WEIGHTS: AutoBuilderWeights = {

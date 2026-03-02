@@ -234,6 +234,7 @@ export function AutoBuilderModal(props: {
   const [lastReasonCode, setLastReasonCode] = useState<string | null>(null);
   const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
   const [previewCandidates, setPreviewCandidates] = useState<AutoBuildCandidate[]>([]);
+  const [nearMissCandidates, setNearMissCandidates] = useState<AutoBuildCandidate[]>([]);
   const [lastRejectStats, setLastRejectStats] = useState<ReturnType<typeof parseRejectStatsFromDetail>>(null);
   const [retryAvailable, setRetryAvailable] = useState(false);
   const lastConstraintsRef = useRef<AutoBuildConstraints | null>(null);
@@ -416,6 +417,18 @@ export function AutoBuilderModal(props: {
           if (event.previewCandidates) {
             setPreviewCandidates(event.previewCandidates);
           }
+          if (event.nearMissCandidates) {
+            setNearMissCandidates((prev) => {
+              const merged = [...prev, ...event.nearMissCandidates!];
+              const seen = new Set<string>();
+              return merged.filter((c) => {
+                const key = ITEM_SLOTS.map((s) => c.slots[s] ?? '').join(',');
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).slice(0, 10);
+            });
+          }
           if (event.phase === 'diagnostics' && event.reasonCode) {
             reasonCodeRef.current = event.reasonCode;
             setLastReasonCode(event.reasonCode);
@@ -458,6 +471,18 @@ export function AutoBuilderModal(props: {
             setProgressEvent(event);
             if (event.previewCandidates) {
               setPreviewCandidates(event.previewCandidates);
+            }
+            if (event.nearMissCandidates) {
+              setNearMissCandidates((prev) => {
+                const merged = [...prev, ...event.nearMissCandidates!];
+                const seen = new Set<string>();
+                return merged.filter((c) => {
+                  const key = ITEM_SLOTS.map((s) => c.slots[s] ?? '').join(',');
+                  if (seen.has(key)) return false;
+                  seen.add(key);
+                  return true;
+                }).slice(0, 10);
+              });
             }
             if (event.phase === 'diagnostics' && event.reasonCode) {
               reasonCodeRef.current = event.reasonCode;
@@ -575,6 +600,7 @@ export function AutoBuilderModal(props: {
     abortRef.current = abort;
     setRunning(true);
     setPreviewCandidates([]);
+    setNearMissCandidates([]);
     setRetryAvailable(false);
     setLastRejectStats(null);
     lastConstraintsRef.current = constraints;
@@ -635,7 +661,9 @@ export function AutoBuilderModal(props: {
             : null;
         setError(
           [
-            'No valid candidates found.',
+            nearMissCandidates.length > 0
+              ? `No exact candidates found, but ${nearMissCandidates.length} near-miss build(s) detected (see below).`
+              : 'No valid candidates found.',
             diagnosticsRef.current ? `Diagnostics: ${diagnosticsRef.current}` : '',
             reasonMessage
               ? reasonMessage
@@ -725,6 +753,7 @@ export function AutoBuilderModal(props: {
     abortRef.current = abort;
     setRunning(true);
     setPreviewCandidates([]);
+    setNearMissCandidates([]);
     const label = tier === 'exhaustive' ? 'Exhaustive retry' : 'Deep retry';
     setProgress(`${label} • topK ${deeperConstraints.topKPerSlot}, beam ${deeperConstraints.beamWidth}`);
 
@@ -734,6 +763,18 @@ export function AutoBuilderModal(props: {
         onProgress: (event) => {
           setProgressEvent(event);
           if (event.previewCandidates) setPreviewCandidates(event.previewCandidates);
+          if (event.nearMissCandidates) {
+            setNearMissCandidates((prev) => {
+              const merged = [...prev, ...event.nearMissCandidates!];
+              const seen = new Set<string>();
+              return merged.filter((c) => {
+                const key = ITEM_SLOTS.map((s) => c.slots[s] ?? '').join(',');
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).slice(0, 10);
+            });
+          }
           if (event.phase === 'diagnostics' && event.reasonCode) {
             reasonCodeRef.current = event.reasonCode;
             setLastReasonCode(event.reasonCode);
@@ -753,7 +794,11 @@ export function AutoBuilderModal(props: {
         setLastRejectStats(finalRejectStats);
         setProgress('');
         setProgressEvent(null);
-        setError(`No valid candidates found after ${label.toLowerCase()}. Try relaxing constraints or increasing search budgets further.`);
+        setError(
+          nearMissCandidates.length > 0
+            ? `No exact candidates after ${label.toLowerCase()}, but ${nearMissCandidates.length} near-miss build(s) detected (see below).`
+            : `No valid candidates found after ${label.toLowerCase()}. Try relaxing constraints or increasing search budgets further.`,
+        );
       } else {
         setProgress(`Completed. ${candidates.length} valid candidates.`);
       }
@@ -1358,6 +1403,7 @@ export function AutoBuilderModal(props: {
             {(() => {
               const isPreview = running && previewCandidates.length > 0;
               const shownCandidates = (isPreview ? previewCandidates.slice(0, 2) : results);
+              const showNearMisses = !running && results.length === 0 && nearMissCandidates.length > 0;
               return (
                 <>
                   <div className="mb-3 flex items-center justify-between">
@@ -1369,62 +1415,123 @@ export function AutoBuilderModal(props: {
                     </div>
                     <div className="text-xs text-[var(--wb-muted)]">
                       {shownCandidates.length} shown
+                      {showNearMisses ? ` + ${nearMissCandidates.length} near-miss` : ''}
                     </div>
                   </div>
 
                   <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 wb-scrollbar">
-                    {shownCandidates.length === 0 ? (
+                    {shownCandidates.length === 0 && !showNearMisses ? (
                       <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
                         Run Build Solver to generate candidate builds.
                       </div>
-                    ) : (
-                      shownCandidates.map((candidate, index) => (
-                        <div
-                          key={`${candidate.score}-${index}`}
-                          className={
-                            isPreview
-                              ? 'rounded-xl border border-[var(--wb-info-border)] bg-[var(--wb-info-soft)] p-3'
-                              : 'rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3'
-                          }
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-semibold">
-                                #{index + 1} | Score {Math.round(candidate.score).toLocaleString()}
-                              </div>
-                              <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                                HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
-                              </div>
-                              <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                                SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
-                              </div>
-                              {isPreview ? (
-                                <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
-                                  Live preview only – may not be a complete or fully feasible build.
-                                </div>
-                              ) : null}
+                    ) : null}
+                    {shownCandidates.map((candidate, index) => (
+                      <div
+                        key={`${candidate.score}-${index}`}
+                        className={
+                          isPreview
+                            ? 'rounded-xl border border-[var(--wb-info-border)] bg-[var(--wb-info-soft)] p-3'
+                            : 'rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3'
+                        }
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-semibold">
+                              #{index + 1} | Score {Math.round(candidate.score).toLocaleString()}
                             </div>
-                            {!isPreview ? (
-                              <Button className="px-2 py-1 text-xs" onClick={() => props.onLoadCandidate(candidate)}>
-                                Load into Workbench
-                              </Button>
+                            <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                              HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                            </div>
+                            <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                              SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
+                            </div>
+                            {isPreview ? (
+                              <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
+                                Live preview only – may not be a complete or fully feasible build.
+                              </div>
                             ) : null}
                           </div>
-                          <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
-                            {ITEM_SLOTS.map((slot) => (
-                              <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1">
-                                <div className="text-[10px] uppercase tracking-wide text-[var(--wb-muted)]">{slot}</div>
-                                <div className="truncate">
-                                  {candidate.slots[slot] != null
-                                    ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
-                                    : 'Empty'}
-                                </div>
+                          {!isPreview ? (
+                            <Button className="px-2 py-1 text-xs" onClick={() => props.onLoadCandidate(candidate)}>
+                              Load into Workbench
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
+                          {ITEM_SLOTS.map((slot) => (
+                            <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1">
+                              <div className="text-[10px] uppercase tracking-wide text-[var(--wb-muted)]">{slot}</div>
+                              <div className="truncate">
+                                {candidate.slots[slot] != null
+                                  ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
+                                  : 'Empty'}
                               </div>
-                            ))}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+
+                    {showNearMisses ? (
+                      <>
+                        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
+                          <div className="text-sm font-semibold text-amber-200">
+                            No exact candidates found — {nearMissCandidates.length} near-miss build{nearMissCandidates.length > 1 ? 's' : ''} detected
+                          </div>
+                          <div className="mt-1 text-xs text-amber-100/80">
+                            These builds came close but missed one or more constraints by a small margin. Builds that only need a few extra skill points may be fixable with tomes.
                           </div>
                         </div>
-                      ))
-                    )}
+                        {nearMissCandidates.map((candidate, index) => (
+                          <div
+                            key={`nm-${candidate.score}-${index}`}
+                            className="rounded-xl border border-amber-400/30 bg-amber-900/20 p-3"
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="text-sm font-semibold text-amber-200">
+                                  Near-miss #{index + 1} | Score {Math.round(candidate.score).toLocaleString()}
+                                </div>
+                                <div className="mt-1 text-xs text-amber-100/70">
+                                  HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                                </div>
+                                <div className="mt-1 text-xs text-amber-100/70">
+                                  SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
+                                </div>
+                                {candidate.nearMissReasons?.length ? (
+                                  <div className="mt-2 space-y-0.5">
+                                    {candidate.nearMissReasons.map((reason, ri) => (
+                                      <div key={ri} className="text-[11px] text-amber-300/90">
+                                        {reason}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <Button
+                                variant="ghost"
+                                className="border border-amber-400/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-400/10"
+                                onClick={() => props.onLoadCandidate(candidate)}
+                              >
+                                Load anyway
+                              </Button>
+                            </div>
+                            <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
+                              {ITEM_SLOTS.map((slot) => (
+                                <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-black/10 px-2 py-1">
+                                  <div className="text-[10px] uppercase tracking-wide text-amber-200/60">{slot}</div>
+                                  <div className="truncate text-amber-100/80">
+                                    {candidate.slots[slot] != null
+                                      ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
+                                      : 'Empty'}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </>
+                    ) : null}
                   </div>
                 </>
               );

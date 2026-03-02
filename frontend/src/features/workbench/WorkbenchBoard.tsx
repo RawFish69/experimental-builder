@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useDroppable, useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
-import { Copy, Link2, Lock, Trash2, Undo2, Upload } from 'lucide-react';
+import { Copy, ExternalLink, Link2, Lock, Trash2, Undo2, Upload } from 'lucide-react';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
 import { categoryLabel, slotLabel, slotToCategory } from '@/domain/items/types';
 import type { CraftedSlotInfo } from '@/domain/build/types';
@@ -170,6 +170,7 @@ export function WorkbenchBoard(props: {
   onShareWorkbench?: () => void;
   onExportWorkbench?: () => void;
   onImportWorkbench?: () => void;
+  onOpenInWynnBuilder?: () => void;
   /** When set, search results are embedded in this panel instead of below */
   searchResults?: ReactNode;
 }) {
@@ -349,7 +350,7 @@ export function WorkbenchBoard(props: {
         ) : null}
 
         <div className="wb-surface rounded-xl p-2">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <Button variant="ghost" className="justify-start" onClick={props.onShareWorkbench}>
               <Link2 size={14} className="mr-2" />
               Share
@@ -361,6 +362,10 @@ export function WorkbenchBoard(props: {
             <Button variant="ghost" className="justify-start" onClick={props.onImportWorkbench}>
               <Upload size={14} className="mr-2" />
               Import
+            </Button>
+            <Button variant="ghost" className="justify-start" onClick={props.onOpenInWynnBuilder}>
+              <ExternalLink size={14} className="mr-2" />
+              WynnBuilder
             </Button>
           </div>
         </div>

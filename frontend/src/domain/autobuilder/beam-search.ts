@@ -1305,8 +1305,10 @@ function finalizeBeamCandidates(params: {
   constraints: AutoBuildConstraints;
   skillpointFeasibilityOptions?: NonNullable<Parameters<typeof evaluateBuild>[2]>['skillpointFeasibility'] | null;
   signal?: AbortSignal;
+  collectNearMisses?: boolean;
 }): {
   candidates: AutoBuildCandidate[];
+  nearMissCandidates: AutoBuildCandidate[];
   rejectStats: {
     majorIds: number;
     spInvalid: number;
@@ -1319,10 +1321,12 @@ function finalizeBeamCandidates(params: {
     thresholdFailureExample?: string;
   };
 } {
-  const { beam, catalog, constraints, skillpointFeasibilityOptions, signal } = params;
+  const { beam, catalog, constraints, skillpointFeasibilityOptions, signal, collectNearMisses } = params;
   const resolvedSpOpts = skillpointFeasibilityOptions ?? skillpointFeasibilityOptionsFromMode(constraints);
   const candidates: AutoBuildCandidate[] = [];
+  const nearMissCandidates: AutoBuildCandidate[] = [];
   const seenCandidateKeys = new Set<string>();
+  const seenNearMissKeys = new Set<string>();
   const rejectStats = {
     majorIds: 0,
     spInvalid: 0,
@@ -1333,6 +1337,15 @@ function finalizeBeamCandidates(params: {
     hardItem: 0,
     thresholdFailureExample: undefined as string | undefined,
   };
+
+  // Relaxed SP options for near-miss detection: try with guild rainbow tomes (+5)
+  const relaxedSpOpts = constraints.skillpointFeasibilityMode === 'no_tomes'
+    ? skillpointOptionsFromTomeMode('guild_rainbow', constraints.level)
+    : constraints.skillpointFeasibilityMode === 'flexible_2'
+      ? skillpointOptionsFromTomeMode('guild_rainbow', constraints.level)
+      : null;
+
+  const NEAR_MISS_LIMIT = 10;
 
   for (const node of beam) {
     if (signal?.aborted) throw new DOMException('Auto build cancelled', 'AbortError');
@@ -1349,10 +1362,42 @@ function finalizeBeamCandidates(params: {
       catalog,
       { skillpointFeasibility: resolvedSpOpts },
     );
-    if (!summary.derived.skillpointFeasible) {
+
+    const spFailed = !summary.derived.skillpointFeasible;
+
+    if (spFailed) {
       rejectStats.spInvalid++;
+
+      // Near-miss: check if tomes would save this build
+      if (collectNearMisses && relaxedSpOpts && nearMissCandidates.length < NEAR_MISS_LIMIT) {
+        const relaxedSummary = evaluateBuild(
+          { slots: node.slots, level: constraints.level, characterClass: constraints.characterClass },
+          catalog,
+          { skillpointFeasibility: relaxedSpOpts },
+        );
+        if (relaxedSummary.derived.skillpointFeasible) {
+          const key = canonicalCandidateKey(node.slots);
+          if (!seenNearMissKeys.has(key)) {
+            seenNearMissKeys.add(key);
+            const hardCheck = validateFinalHardConstraints(node.slots, catalog, constraints, relaxedSummary);
+            const reasons: string[] = ['Needs tomes for SP feasibility (+5 guild rainbow)'];
+            if (!hardCheck.ok && hardCheck.failedChecks?.length) {
+              for (const fc of hardCheck.failedChecks) reasons.push(fc);
+            }
+            const { score, breakdown } = scoreSummary(relaxedSummary, constraints.weights, constraints);
+            nearMissCandidates.push({
+              slots: cloneSlots(node.slots),
+              score,
+              scoreBreakdown: breakdown,
+              summary: relaxedSummary,
+              nearMissReasons: reasons,
+            });
+          }
+        }
+      }
       continue;
     }
+
     const hardCheck = validateFinalHardConstraints(node.slots, catalog, constraints, summary);
     if (!hardCheck.ok) {
       rejectStats.hardConstraints++;
@@ -1361,6 +1406,21 @@ function finalizeBeamCandidates(params: {
         rejectStats.hardThresholds++;
         if (rejectStats.thresholdFailureExample === undefined && hardCheck.failedChecks?.length) {
           rejectStats.thresholdFailureExample = hardCheck.failedChecks[0];
+        }
+        // Near-miss: SP passed but threshold failed by small margin
+        if (collectNearMisses && nearMissCandidates.length < NEAR_MISS_LIMIT && hardCheck.failedChecks?.length) {
+          const key = canonicalCandidateKey(node.slots);
+          if (!seenNearMissKeys.has(key)) {
+            seenNearMissKeys.add(key);
+            const { score, breakdown } = scoreSummary(summary, constraints.weights, constraints);
+            nearMissCandidates.push({
+              slots: cloneSlots(node.slots),
+              score,
+              scoreBreakdown: breakdown,
+              summary,
+              nearMissReasons: hardCheck.failedChecks.map((fc) => `Threshold miss: ${fc}`),
+            });
+          }
         }
       } else rejectStats.hardItem++;
       continue;
@@ -1390,7 +1450,9 @@ function finalizeBeamCandidates(params: {
     return 0;
   });
 
-  return { candidates, rejectStats };
+  nearMissCandidates.sort((a, b) => b.score - a.score);
+
+  return { candidates, nearMissCandidates, rejectStats };
 }
 
 function runFeasibilityBiasedBeamSearch(params: {
@@ -2238,11 +2300,12 @@ export function runAutoBuildBeamSearch(params: {
   }
 
   let finalizationBeam = beam;
-  let { candidates, rejectStats } = finalizeBeamCandidates({
+  let { candidates, nearMissCandidates, rejectStats } = finalizeBeamCandidates({
     beam,
     catalog,
     constraints,
     signal,
+    collectNearMisses: true,
   });
   const thresholdExampleDetail = rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : '';
   const initialReasonCode =
@@ -2332,8 +2395,10 @@ export function runAutoBuildBeamSearch(params: {
         catalog,
         constraints,
         signal,
+        collectNearMisses: true,
       });
       candidates = finalized.candidates;
+      nearMissCandidates = [...nearMissCandidates, ...finalized.nearMissCandidates];
       rejectStats = finalized.rejectStats;
       const feasibilityThresholdExample = rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : '';
       onProgress?.({
@@ -2460,6 +2525,33 @@ export function runAutoBuildBeamSearch(params: {
           : `Deterministic fallback found 0 valid builds. Rejected SP-invalid=${rejectStats.spInvalid}, majorID=${rejectStats.majorIds}, duplicates=${rejectStats.duplicate}, hard=${rejectStats.hardConstraints} (speed=${rejectStats.hardAttackSpeed}, thresholds=${rejectStats.hardThresholds}, item=${rejectStats.hardItem}).${rejectStats.thresholdFailureExample ? ` Example failure: ${rejectStats.thresholdFailureExample}.` : ''}`,
       });
     }
+  }
+
+  // Deduplicate and limit near-miss candidates
+  const dedupedNearMisses: AutoBuildCandidate[] = [];
+  const seenNearMissKeysGlobal = new Set<string>();
+  for (const nm of nearMissCandidates) {
+    const key = canonicalCandidateKey(nm.slots);
+    if (seenNearMissKeysGlobal.has(key)) continue;
+    // Don't include near-misses that ended up as actual candidates
+    const isExactCandidate = candidates.some((c) => canonicalCandidateKey(c.slots) === key);
+    if (isExactCandidate) continue;
+    seenNearMissKeysGlobal.add(key);
+    dedupedNearMisses.push(nm);
+  }
+  dedupedNearMisses.sort((a, b) => b.score - a.score);
+  const topNearMisses = dedupedNearMisses.slice(0, 10);
+
+  if (candidates.length === 0 && topNearMisses.length > 0) {
+    onProgress?.({
+      phase: 'near_misses',
+      processedStates,
+      beamSize: finalizationBeam.length,
+      totalSlots: slotOrder.length,
+      expandedSlots: slotOrder.length,
+      detail: `Found ${topNearMisses.length} near-miss build(s) that almost passed all checks.`,
+      nearMissCandidates: topNearMisses,
+    });
   }
 
   return candidates.slice(0, Math.max(1, constraints.topN));

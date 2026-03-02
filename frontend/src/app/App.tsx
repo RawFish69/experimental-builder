@@ -26,6 +26,7 @@ import { WorkbenchBoard } from '@/features/workbench/WorkbenchBoard';
 import { evaluateBuild } from '@/domain/build/build-metrics';
 import { legacyCodecAdapter } from '@/domain/build/legacy-codec-adapter';
 import { getLegacyBuilderUrl } from '@/domain/build/legacy-open-link';
+import { encodeBuildHash, getWynnBuilderBuildUrl } from '@/domain/build/build-encoder';
 import { useWorkbenchStore } from '@/domain/build/workbench-state';
 import type { WorkbenchStore } from '@/domain/build/workbench-state';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
@@ -460,6 +461,21 @@ export function App() {
     setStatusMessage(`Workbench export ready. Code length: ${code.length}`);
   };
 
+  const openInWynnBuilder = () => {
+    if (!catalog) {
+      setStatusMessage('Catalog not loaded yet.');
+      return;
+    }
+    const hash = encodeBuildHash(snapshot, catalog);
+    if (!hash) {
+      setStatusMessage('No items equipped — nothing to export.');
+      return;
+    }
+    const url = getWynnBuilderBuildUrl(hash);
+    window.open(url, '_blank', 'noopener,noreferrer');
+    setStatusMessage('Opened build in WynnBuilder.');
+  };
+
   const importWorkbench = async () => {
     const raw = window.prompt('Paste a Workbench JSON export, Workbench URL, or legacy builder URL/hash.');
     if (!raw) return;
@@ -696,6 +712,7 @@ export function App() {
             onShareWorkbench={() => void shareWorkbench()}
             onExportWorkbench={exportWorkbench}
             onImportWorkbench={() => void importWorkbench()}
+            onOpenInWynnBuilder={openInWynnBuilder}
             searchResults={
               searchState.resultsBelowBuild ? (
                 <SearchResultList
