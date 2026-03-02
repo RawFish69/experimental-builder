@@ -227,13 +227,17 @@ export function AutoBuilderModal(props: {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showTips, setShowTips] = useState(false);
-  const [deepFallbackEnabled, setDeepFallbackEnabled] = useState(true);
+  const [deepFallbackEnabled, setDeepFallbackEnabled] = useState(false);
   const [useExhaustiveSmallPool, setUseExhaustiveSmallPool] = useState(true);
   const [exhaustiveStateLimit, setExhaustiveStateLimit] = useState<number>(DEFAULT_AUTO_BUILD_CONSTRAINTS.exhaustiveStateLimit);
   const [lastDiagnostics, setLastDiagnostics] = useState<string | null>(null);
   const [lastReasonCode, setLastReasonCode] = useState<string | null>(null);
   const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
   const [previewCandidates, setPreviewCandidates] = useState<AutoBuildCandidate[]>([]);
+  const [lastRejectStats, setLastRejectStats] = useState<ReturnType<typeof parseRejectStatsFromDetail>>(null);
+  const [retryAvailable, setRetryAvailable] = useState(false);
+  const lastConstraintsRef = useRef<AutoBuildConstraints | null>(null);
+  const lastWorkbenchRef = useRef<WorkbenchSnapshot | null>(null);
   const diagnosticsRef = useRef<string | null>(null);
   const reasonCodeRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -534,6 +538,11 @@ export function AutoBuilderModal(props: {
       return;
     }
 
+    const hasCustomRanges = customNumericRanges.length > 0;
+    const isConstraintOnlyMode =
+      hasCustomRanges &&
+      primaryPreset === 'constraints';
+
     const constraints: AutoBuildConstraints = {
       ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
       characterClass: builderCharacterClass,
@@ -558,6 +567,7 @@ export function AutoBuilderModal(props: {
       topN: Math.max(1, Math.min(150, topN)),
       topKPerSlot: Math.max(10, Math.min(300, topKPerSlot)),
       beamWidth: Math.max(20, Math.min(5000, beamWidth)),
+      constraintOnlyMode: isConstraintOnlyMode,
     };
 
     abortRef.current?.abort();
@@ -565,11 +575,20 @@ export function AutoBuilderModal(props: {
     abortRef.current = abort;
     setRunning(true);
     setPreviewCandidates([]);
+    setRetryAvailable(false);
+    setLastRejectStats(null);
+    lastConstraintsRef.current = constraints;
+    lastWorkbenchRef.current = props.snapshot;
     setProgress('Starting...');
     try {
       const candidates = await runWithAttemptPlan(props.catalog, constraints, props.snapshot, abort.signal);
       setResults(candidates);
       if (candidates.length === 0) {
+        const finalRejectStats = parseRejectStatsFromDetail(diagnosticsRef.current ?? undefined);
+        setLastRejectStats(finalRejectStats);
+        if (!deepFallbackEnabled) {
+          setRetryAvailable(true);
+        }
         setProgress('');
         setProgressEvent(null);
         const diag = diagnosticsRef.current ?? '';
@@ -658,9 +677,99 @@ export function AutoBuilderModal(props: {
     setProgressEvent(null);
   };
 
+  const retryDeeper = async (tier: 'deep' | 'exhaustive') => {
+    const catalog = props.catalog;
+    const baseConstraints = lastConstraintsRef.current;
+    const baseWorkbench = lastWorkbenchRef.current;
+    if (!catalog || !baseConstraints || !baseWorkbench) return;
+
+    setError(null);
+    setRetryAvailable(false);
+    setLastRejectStats(null);
+    setLastDiagnostics(null);
+    setLastReasonCode(null);
+    diagnosticsRef.current = null;
+    reasonCodeRef.current = null;
+
+    const deeperConstraints: AutoBuildConstraints = {
+      ...baseConstraints,
+      topKPerSlot: tier === 'exhaustive'
+        ? Math.max(baseConstraints.topKPerSlot, 300)
+        : Math.max(baseConstraints.topKPerSlot, 180),
+      beamWidth: tier === 'exhaustive'
+        ? Math.max(baseConstraints.beamWidth, 2600)
+        : Math.max(baseConstraints.beamWidth, 1200),
+      maxStates: tier === 'exhaustive'
+        ? Math.max(baseConstraints.maxStates, 12_000_000)
+        : Math.max(baseConstraints.maxStates, 4_000_000),
+      useExhaustiveSmallPool: true,
+      exhaustiveStateLimit: tier === 'exhaustive'
+        ? Math.max(baseConstraints.exhaustiveStateLimit, 2_000_000)
+        : Math.max(baseConstraints.exhaustiveStateLimit, 1_200_000),
+      weights: {
+        ...baseConstraints.weights,
+        ...(baseConstraints.constraintOnlyMode ? {} : {
+          legacyBaseDps: baseConstraints.weights.legacyBaseDps * 0.6,
+          dpsProxy: baseConstraints.weights.dpsProxy * 0.55,
+          legacyEhp: Math.max(baseConstraints.weights.legacyEhp, 1.0),
+          ehpProxy: Math.max(baseConstraints.weights.ehpProxy, 1.0),
+          sustain: Math.max(baseConstraints.weights.sustain, 0.8),
+          skillPointTotal: Math.max(baseConstraints.weights.skillPointTotal, 0.8),
+          reqTotalPenalty: Math.max(baseConstraints.weights.reqTotalPenalty, 1.8),
+        }),
+      },
+    };
+
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+    setRunning(true);
+    setPreviewCandidates([]);
+    const label = tier === 'exhaustive' ? 'Exhaustive retry' : 'Deep retry';
+    setProgress(`${label} • topK ${deeperConstraints.topKPerSlot}, beam ${deeperConstraints.beamWidth}`);
+
+    try {
+      const candidates = await workerRef.current!.run(catalog, baseWorkbench, deeperConstraints, {
+        signal: abort.signal,
+        onProgress: (event) => {
+          setProgressEvent(event);
+          if (event.previewCandidates) setPreviewCandidates(event.previewCandidates);
+          if (event.phase === 'diagnostics' && event.reasonCode) {
+            reasonCodeRef.current = event.reasonCode;
+            setLastReasonCode(event.reasonCode);
+          }
+          if (event.phase === 'diagnostics' && event.detail) {
+            diagnosticsRef.current = event.detail;
+            setLastDiagnostics(event.detail);
+          }
+          setProgress(
+            `${label} • ${event.phase}: ${event.expandedSlots}/${event.totalSlots} slots, beam ${event.beamSize}, states ${event.processedStates}${event.detail ? ` • ${event.detail}` : ''}`,
+          );
+        },
+      });
+      setResults(candidates);
+      if (candidates.length === 0) {
+        const finalRejectStats = parseRejectStatsFromDetail(diagnosticsRef.current ?? undefined);
+        setLastRejectStats(finalRejectStats);
+        setProgress('');
+        setProgressEvent(null);
+        setError(`No valid candidates found after ${label.toLowerCase()}. Try relaxing constraints or increasing search budgets further.`);
+      } else {
+        setProgress(`Completed. ${candidates.length} valid candidates.`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Auto builder failed');
+      setProgress('');
+    } finally {
+      setRunning(false);
+      setProgressEvent(null);
+    }
+  };
+
   const statusMessage = error ?? lastDiagnostics;
   const statusIsError = Boolean(error);
-  const rejectStats = parseRejectStatsFromDetail(progressEvent?.detail);
+  const liveRejectStats = parseRejectStatsFromDetail(progressEvent?.detail);
+  const rejectStats = (running ? liveRejectStats : lastRejectStats) ?? null;
   const totalRejected = rejectStats
     ? rejectStats.spInvalid + rejectStats.majorIds + rejectStats.duplicate + rejectStats.hard
     : 0;
@@ -757,6 +866,64 @@ export function AutoBuilderModal(props: {
                     Item: {rejectStats.item}
                   </span>
                 ) : null}
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {!running && (retryAvailable || (lastRejectStats && totalRejected > 0)) ? (
+        <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/8 p-3">
+          {lastRejectStats && totalRejected > 0 ? (
+            <div className="mb-3">
+              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-amber-200/80">
+                Last pass reject breakdown
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {lastRejectStats.spInvalid > 0 ? (
+                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-200">
+                    SP: {lastRejectStats.spInvalid}
+                  </span>
+                ) : null}
+                {lastRejectStats.majorIds > 0 ? (
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200">
+                    Major ID: {lastRejectStats.majorIds}
+                  </span>
+                ) : null}
+                {lastRejectStats.duplicate > 0 ? (
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200">
+                    Dup: {lastRejectStats.duplicate}
+                  </span>
+                ) : null}
+                {lastRejectStats.speed > 0 ? (
+                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-200">
+                    Speed: {lastRejectStats.speed}
+                  </span>
+                ) : null}
+                {lastRejectStats.thresholds > 0 ? (
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200">
+                    Thresholds: {lastRejectStats.thresholds}
+                  </span>
+                ) : null}
+                {lastRejectStats.item > 0 ? (
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200">
+                    Item: {lastRejectStats.item}
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {retryAvailable ? (
+            <div>
+              <div className="mb-2 text-xs text-amber-100">
+                Fast pass found 0 results. Retry with a higher search budget?
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button variant="ghost" className="text-xs" onClick={() => retryDeeper('deep')}>
+                  Deeper search (2x budget)
+                </Button>
+                <Button variant="ghost" className="text-xs" onClick={() => retryDeeper('exhaustive')}>
+                  Exhaustive search (max budget)
+                </Button>
               </div>
             </div>
           ) : null}
@@ -974,7 +1141,7 @@ export function AutoBuilderModal(props: {
                 </div>
                 <div className="mt-1 text-xs text-[var(--wb-muted)]">
                   {solverStrategies.length === 1 && solverStrategies[0] === 'auto'
-                    ? 'Starts fast, then retries deeper if needed.'
+                    ? (deepFallbackEnabled ? 'Starts fast, then auto-retries deeper if needed.' : 'Starts fast. Prompts to retry deeper if 0 results.')
                     : solverStrategies.includes('fast') && !solverStrategies.includes('constraint') && !solverStrategies.includes('exhaustive')
                       ? 'Single fast pass. Lowest wait time, weakest fallback.'
                       : solverStrategies.includes('constraint')
@@ -1179,7 +1346,7 @@ export function AutoBuilderModal(props: {
                   : ''}
                 {` | Attack logic: ${attackSpeedConstraintMode === 'or' ? 'Either' : 'Both'}.`}
                 {` | SP mode: ${skillpointFeasibilityMode === 'guild_rainbow' ? 'Guild rainbow (+1 each)' : skillpointFeasibilityMode === 'flexible_2' ? '+2 flexible' : 'No tomes'}.`}
-                {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ''}
+                {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ' | Prompts to retry manually if fast pass finds 0.'}
                 {useExhaustiveSmallPool ? ` | Exact enumeration is used automatically when pool combinations are <= ${Math.round(exhaustiveStateLimit).toLocaleString()}.` : ''}
               </div>
             </div>

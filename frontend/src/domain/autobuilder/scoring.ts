@@ -86,18 +86,34 @@ export function computeCustomRangeScore(summary: BuildSummary, constraints: Auto
 }
 
 export function scoreSummary(summary: BuildSummary, weights: AutoBuilderWeights, constraints: AutoBuildConstraints): { score: number; breakdown: AutoBuildScoreBreakdown } {
+  const customRangeScore = computeCustomRangeScore(summary, constraints);
+
+  if (constraints.constraintOnlyMode) {
+    const breakdown: AutoBuildScoreBreakdown = {
+      legacyBaseDps: 0,
+      legacyEhp: 0,
+      dpsProxy: 0,
+      spellProxy: 0,
+      meleeProxy: 0,
+      ehpProxy: 0,
+      speed: 0,
+      sustain: 0,
+      skillPointTotal: summary.derived.skillPointTotal * 0.01,
+      reqPenalty: summary.derived.reqTotal * 0.01,
+      thresholdPenalty: 0,
+    };
+    const score = customRangeScore + breakdown.skillPointTotal - breakdown.reqPenalty;
+    return { score, breakdown };
+  }
+
   const sustain = computeSustain(summary);
   const reqPenalty = summary.derived.reqTotal * weights.reqTotalPenalty;
   const thresholdPenalty = computeThresholdPenalty(summary, constraints);
 
-  // When the user has specific ID targets, scale back the generic EHP/DPS signals in
-  // final scoring to match how roughItemScore already de-emphasises them during beam search.
   const customMinCount = (constraints.target.customNumericRanges ?? []).filter(
     (r) => typeof r.min === 'number',
   ).length;
   const genericScale = customMinCount > 0 ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
-
-  const customRangeScore = computeCustomRangeScore(summary, constraints);
 
   const breakdown: AutoBuildScoreBreakdown = {
     legacyBaseDps: summary.derived.legacyBaseDps * weights.legacyBaseDps * genericScale,

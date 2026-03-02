@@ -321,6 +321,7 @@ function attackSpeedBiasValue(
   assignedAtkTier: number | undefined,
   remainingMinAtkTier = 0,
   remainingMaxAtkTier = 0,
+  amplifier = 1,
 ): number {
   if (!ctx || !ctx.preferredDirection) return 0;
   const total = ctx.fixedAtkTierTotal + (assignedAtkTier ?? 0);
@@ -348,14 +349,10 @@ function attackSpeedBiasValue(
   }
   if (!Number.isFinite(bestDistance)) return 0;
 
-  // If every possible final speed tier for this branch (given remaining slots) is already allowed,
-  // stop prioritizing extra atkTier and let damage / objective score rank it.
   if (worstDistance === 0) return 0;
 
-  // Otherwise, bias toward branches that reduce the worst-case miss and preserve safety margin
-  // in the preferred direction (important for SUPER_FAST targets with later negative atkTier items).
   const safetyProgress = ctx.preferredDirection > 0 ? low : -high;
-  return -worstDistance * 1_000 - bestDistance * 100 + safetyProgress;
+  return (-worstDistance * 1_000 - bestDistance * 100 + safetyProgress) * amplifier;
 }
 
 function summarySatisfiesTargetThresholds(
@@ -524,16 +521,26 @@ const CUSTOM_RANGE_MIN_WEIGHT_STRONG = 14;
 
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
   const customRanges = constraints.target.customNumericRanges ?? [];
+
+  // Pure constraint-satisfaction: only score by how much items contribute to custom ranges.
+  if (constraints.constraintOnlyMode) {
+    let score = 0;
+    for (const range of customRanges) {
+      const key = range.key?.trim();
+      if (!key) continue;
+      const v = item.numericIndex[key] ?? 0;
+      if (typeof range.min === 'number') score += v * CUSTOM_RANGE_MIN_WEIGHT_STRONG;
+      if (typeof range.max === 'number') score -= v * CUSTOM_RANGE_MAX_WEIGHT;
+    }
+    score -= item.roughScoreFields.reqTotal * 0.05;
+    return score;
+  }
+
   const hasCustomMins = customRanges.some((r) => typeof r.min === 'number');
 
-  // When the user has set specific ID minimums, scale back the generic defensive / EHP
-  // contribution so those generic signals don't drown out the user's actual goals.
-  // customScaleFactor → 0 as the number of custom-min constraints grows (min 0.15).
   const customMinCount = customRanges.filter((r) => typeof r.min === 'number').length;
   const genericScale = hasCustomMins ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
 
-  // Use only the combined defensive weight (legacyEhp + ehpProxy) on ehpProxy once,
-  // to avoid the double-weighting that was inflating high-HP/def items.
   const defWeight = (constraints.weights.legacyEhp + constraints.weights.ehpProxy) * genericScale;
 
   let score =
@@ -1569,10 +1576,11 @@ function runFeasibilityBiasedBeamSearch(params: {
 
     const remainingMinAtkTier = atkTierBounds ? atkTierBounds.minSuffix[orderIndex + 1] : 0;
     const remainingMaxAtkTier = atkTierBounds ? atkTierBounds.maxSuffix[orderIndex + 1] : 0;
+    const spdAmp = constraints.constraintOnlyMode ? 10 : 1;
     const primarySorted = [...nextBeam].sort((a, b) => {
       if (attackSpeedCtx) {
-        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
-        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp);
         if (ab !== bb) return bb - ab;
       }
       if (focusStats.length > 0) {
@@ -1592,8 +1600,8 @@ function runFeasibilityBiasedBeamSearch(params: {
       const bd = customRangeDeficit(b.customTotals, customSpecs);
       if (ad !== bd) return ad - bd;
       if (attackSpeedCtx) {
-        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
-        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp);
         if (ab !== bb) return bb - ab;
       }
       return b.optimisticBound - a.optimisticBound;
@@ -2195,10 +2203,11 @@ export function runAutoBuildBeamSearch(params: {
 
     const remainingMinAtkTier = atkTierBounds ? atkTierBounds.minSuffix[orderIndex + 1] : 0;
     const remainingMaxAtkTier = atkTierBounds ? atkTierBounds.maxSuffix[orderIndex + 1] : 0;
+    const spdAmp2 = constraints.constraintOnlyMode ? 10 : 1;
     const primarySorted = [...nextBeam].sort((a, b) => {
       if (attackSpeedCtx) {
-        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
-        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp2);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp2);
         if (ab !== bb) return bb - ab;
       }
       if (a.optimisticBound !== b.optimisticBound) return b.optimisticBound - a.optimisticBound;
@@ -2209,8 +2218,8 @@ export function runAutoBuildBeamSearch(params: {
       const bd = customRangeDeficit(b.customTotals, customSpecs2);
       if (ad !== bd) return ad - bd;
       if (attackSpeedCtx) {
-        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
-        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier);
+        const ab = attackSpeedBiasValue(attackSpeedCtx, a.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp2);
+        const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp2);
         if (ab !== bb) return bb - ab;
       }
       return b.optimisticBound - a.optimisticBound;

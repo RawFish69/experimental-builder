@@ -54,6 +54,11 @@ export interface AutoBuildConstraints {
   useExhaustiveSmallPool: boolean;
   exhaustiveStateLimit: number;
   allowRestricted: boolean;
+  /**
+   * When true, scoring is purely constraint-satisfaction based: generic EHP/DPS
+   * weights are zeroed and only customNumericRanges + feasibility matter.
+   */
+  constraintOnlyMode?: boolean;
 }
 
 export interface AutoBuildScoreBreakdown {
@@ -119,11 +124,11 @@ export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   onlyPinnedItems: false,
   weights: DEFAULT_AUTO_BUILDER_WEIGHTS,
   topN: 50,
-  topKPerSlot: 100,
-  beamWidth: 500,
-  maxStates: 180000,
+  topKPerSlot: 80,
+  beamWidth: 400,
+  maxStates: 150000,
   useExhaustiveSmallPool: true,
-  exhaustiveStateLimit: 400000,
+  exhaustiveStateLimit: 250000,
   // Allow restricted / untradeable items by default in Build Solver.
   allowRestricted: true,
 };
