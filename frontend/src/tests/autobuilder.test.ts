@@ -219,8 +219,9 @@ describe('autobuilder beam search', () => {
         beamWidth: 120,
         target: {
           customNumericRanges: [
-            { key: 'poison', min: 400 },
-            { key: 'poison', max: 600 },
+            // After switching item stats to max-roll space, poison 500 becomes ~650.
+            { key: 'poison', min: 600 },
+            { key: 'poison', max: 800 },
           ],
         },
       },

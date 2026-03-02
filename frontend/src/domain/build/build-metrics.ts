@@ -1,6 +1,6 @@
 import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import { getClassFromWeaponType } from '@/domain/items/types';
-import type { BuildSummary, WorkbenchSnapshot } from '@/domain/build/types';
+import type { BuildSummary, SkillpointTomeMode, WorkbenchSnapshot } from '@/domain/build/types';
 import { ITEM_SLOTS, slotToCategory } from '@/domain/items/types';
 
 const EMPTY_SUMMARY: BuildSummary = {
@@ -58,6 +58,8 @@ interface EquipFeasibilityResult {
 
 interface SkillpointFeasibilityOptions {
   extraBaseSkillPoints?: SkillVec;
+  /** Override available SP (e.g. 204 for +2-in-two guild tome). Default: level-based (200 at 106). */
+  availableSkillPointsOverride?: number;
 }
 
 // Ported from legacy builder build_utils.js / builder_graph.js to keep Workbench EHP
@@ -167,7 +169,7 @@ function pushParetoState(frontier: ExactFeasibilityState[], candidate: ExactFeas
 function estimateEquipFeasibility(items: NormalizedItem[], level: number, options: SkillpointFeasibilityOptions = {}): EquipFeasibilityResult {
   if (items.length === 0) return { feasible: true, assignedTotal: 0, assignedByStat: [0, 0, 0, 0, 0] };
 
-  const available = levelToAvailableSkillPoints(level);
+  const available = options.availableSkillPointsOverride ?? levelToAvailableSkillPoints(level);
   const extraBase = options.extraBaseSkillPoints ?? [0, 0, 0, 0, 0];
   const n = items.length;
   const reqs = items.map(itemReqVector);
@@ -207,10 +209,34 @@ function estimateEquipFeasibility(items: NormalizedItem[], level: number, option
         }
         if (!valid) continue;
 
-        const nextAssignedTotal = vecTotal(nextAssigned);
-        if (nextAssignedTotal > available) continue;
-
         const nextMask = mask | (1 << i);
+        const nextBonusSum = bonusSumByMask[nextMask];
+
+        // fix_should_pop: items with negative skill bonuses can cause previously equipped
+        // items to "pop" (become unequippable). Ensure all items in nextMask remain
+        // satisfiable: for each k, we need total >= reqs[k] + bonuses[k].
+        for (let j = 0; j < 5; j++) {
+          let minRequired = 0;
+          const extraJ = extraBase[j] ?? 0;
+          for (let k = 0; k < n; k++) {
+            if ((nextMask & (1 << k)) === 0) continue;
+            if (reqs[k][j] === 0) continue; // Wynnbuilder fix_should_pop skips stats with no req
+            const reqToStay = reqs[k][j] + bonuses[k][j];
+            const deficit = reqToStay - (nextAssigned[j] + nextBonusSum[j] + extraJ);
+            if (deficit > minRequired) minRequired = deficit;
+          }
+          if (minRequired > 0) {
+            nextAssigned[j] += minRequired;
+            if (nextAssigned[j] > 100) {
+              valid = false;
+              break;
+            }
+          }
+        }
+        if (!valid) continue;
+
+        const nextAssignedTotal = vecTotal(nextAssigned);
+        if (nextAssignedTotal > available) continue; // Reject if exceeds level's available SP
         const nextFrontier = (frontiers[nextMask] ??= []);
         pushParetoState(nextFrontier, {
           assigned: nextAssigned,
@@ -253,8 +279,28 @@ export function evaluateBuildSkillpointFeasibility(
   return estimateEquipFeasibility(items, level, options);
 }
 
+const GUILD_RAINBOW_EXTRA: SkillVec = [1, 1, 1, 1, 1];
+/** Guild tome: +2 in two skills = +4 total. (Rainbow is +1 each = +5.) */
+const FLEXIBLE_2_EXTRA_AVAILABLE = 4;
+
+export function skillpointOptionsFromTomeMode(
+  mode: SkillpointTomeMode,
+  level: number,
+): SkillpointFeasibilityOptions {
+  switch (mode) {
+    case 'guild_rainbow':
+      return { extraBaseSkillPoints: GUILD_RAINBOW_EXTRA };
+    case 'flexible_2':
+      return { availableSkillPointsOverride: levelToAvailableSkillPoints(level) + FLEXIBLE_2_EXTRA_AVAILABLE };
+    default:
+      return {};
+  }
+}
+
 export interface BuildEvaluationOptions {
   skillpointFeasibility?: SkillpointFeasibilityOptions;
+  /** Shortcut: derive skillpointFeasibility from tome mode. Ignored if skillpointFeasibility is set. */
+  skillpointTomeMode?: SkillpointTomeMode;
 }
 
 export function getEquippedItems(input: BuildEvaluationInput, catalog: CatalogSnapshot): Partial<Record<(typeof ITEM_SLOTS)[number], NormalizedItem>> {
@@ -365,11 +411,16 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     summary.aggregated.skillPoints.def +
     summary.aggregated.skillPoints.agi;
 
+  const spOpts =
+    options.skillpointFeasibility ??
+    (options.skillpointTomeMode
+      ? skillpointOptionsFromTomeMode(options.skillpointTomeMode, input.level)
+      : undefined);
   const equipFeasibility = evaluateBuildSkillpointFeasibility(
     input.slots,
     catalog,
     input.level,
-    options.skillpointFeasibility,
+    spOpts,
   );
 
   const { spellPct, spellRaw, meleePct, meleeRaw, baseDps, elemDamPct, genericDamPct } = summary.aggregated.offense;

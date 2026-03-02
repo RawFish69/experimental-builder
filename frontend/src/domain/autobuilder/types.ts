@@ -43,7 +43,7 @@ export interface AutoBuildConstraints {
   excludedMajorIds: string[];
   weaponAttackSpeeds: string[];
   attackSpeedConstraintMode: 'or' | 'and';
-  skillpointFeasibilityMode: 'no_tomes' | 'guild_rainbow';
+  skillpointFeasibilityMode: 'no_tomes' | 'guild_rainbow' | 'flexible_2';
   minPowderSlots: number | null;
   onlyPinnedItems: boolean;
   weights: AutoBuilderWeights;
@@ -85,6 +85,8 @@ export interface AutoBuildProgressEvent {
   expandedSlots: number;
   detail?: string;
   reasonCode?: string;
+  /** Optional live preview of best candidates while search is running. */
+  previewCandidates?: AutoBuildCandidate[];
 }
 
 export const DEFAULT_AUTO_BUILDER_WEIGHTS: AutoBuilderWeights = {
@@ -117,11 +119,11 @@ export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   onlyPinnedItems: false,
   weights: DEFAULT_AUTO_BUILDER_WEIGHTS,
   topN: 50,
-  topKPerSlot: 80,
-  beamWidth: 350,
-  maxStates: 120000,
+  topKPerSlot: 100,
+  beamWidth: 500,
+  maxStates: 180000,
   useExhaustiveSmallPool: true,
-  exhaustiveStateLimit: 250000,
+  exhaustiveStateLimit: 400000,
   // Allow restricted / untradeable items by default in Build Solver.
   allowRestricted: true,
 };

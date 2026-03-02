@@ -32,6 +32,7 @@ export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
     selectedSlot: 'weapon',
     comparePreview: { ...EMPTY_COMPARE },
     legacyHash: null,
+    skillpointTomeMode: 'no_tomes',
   };
 }
 
@@ -48,6 +49,7 @@ function snapshotOf(state: WorkbenchBuildState): WorkbenchSnapshot {
     selectedSlot: state.selectedSlot,
     comparePreview: { ...state.comparePreview },
     legacyHash: state.legacyHash,
+    skillpointTomeMode: state.skillpointTomeMode,
   };
 }
 
@@ -80,6 +82,7 @@ function dedupePush(list: number[], itemId: number): void {
 export interface WorkbenchStore extends WorkbenchBuildState {
   setLevel(level: number): void;
   setCharacterClass(characterClass: CharacterClass | null): void;
+  setSkillpointTomeMode(mode: WorkbenchSnapshot['skillpointTomeMode']): void;
   setSelectedSlot(slot: ItemSlot | null): void;
   setComparePreview(preview: Partial<ComparePreview> | null): void;
   pinItem(category: ItemCategoryKey, itemId: number): void;
@@ -130,6 +133,12 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       set((state) => {
         pushHistory(state);
         state.characterClass = characterClass;
+      });
+    },
+
+    setSkillpointTomeMode(mode) {
+      set((state) => {
+        state.skillpointTomeMode = mode ?? 'no_tomes';
       });
     },
 

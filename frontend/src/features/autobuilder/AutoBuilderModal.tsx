@@ -233,6 +233,7 @@ export function AutoBuilderModal(props: {
   const [lastDiagnostics, setLastDiagnostics] = useState<string | null>(null);
   const [lastReasonCode, setLastReasonCode] = useState<string | null>(null);
   const [progressEvent, setProgressEvent] = useState<AutoBuildProgressEvent | null>(null);
+  const [previewCandidates, setPreviewCandidates] = useState<AutoBuildCandidate[]>([]);
   const diagnosticsRef = useRef<string | null>(null);
   const reasonCodeRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -408,6 +409,9 @@ export function AutoBuilderModal(props: {
         signal: abortSignal,
         onProgress: (event) => {
           setProgressEvent(event);
+          if (event.previewCandidates) {
+            setPreviewCandidates(event.previewCandidates);
+          }
           if (event.phase === 'diagnostics' && event.reasonCode) {
             reasonCodeRef.current = event.reasonCode;
             setLastReasonCode(event.reasonCode);
@@ -448,6 +452,9 @@ export function AutoBuilderModal(props: {
           signal: abortSignal,
           onProgress: (event) => {
             setProgressEvent(event);
+            if (event.previewCandidates) {
+              setPreviewCandidates(event.previewCandidates);
+            }
             if (event.phase === 'diagnostics' && event.reasonCode) {
               reasonCodeRef.current = event.reasonCode;
               setLastReasonCode(event.reasonCode);
@@ -557,6 +564,7 @@ export function AutoBuilderModal(props: {
     const abort = new AbortController();
     abortRef.current = abort;
     setRunning(true);
+    setPreviewCandidates([]);
     setProgress('Starting...');
     try {
       const candidates = await runWithAttemptPlan(props.catalog, constraints, props.snapshot, abort.signal);
@@ -684,9 +692,9 @@ export function AutoBuilderModal(props: {
       }
     >
       {running && progressEvent ? (
-        <div className="mb-4 rounded-xl border border-sky-400/30 bg-sky-400/5 p-3">
+        <div className="wb-beam-progress mb-4 rounded-xl p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-sky-400/20 px-2 py-0.5 text-xs font-medium text-sky-100">
+            <span className="rounded-md border border-[var(--wb-info-border)] bg-[var(--wb-info-soft)] px-2 py-0.5 text-xs font-medium text-[var(--wb-info)]">
               {progressEvent.phase === 'exact-search'
                 ? 'Exact search'
                 : progressEvent.phase === 'beam-search'
@@ -701,9 +709,9 @@ export function AutoBuilderModal(props: {
               </span>
             ) : null}
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-black/20">
+          <div className="wb-beam-progress-track h-2.5 w-full overflow-hidden rounded-full">
             <div
-              className="h-full rounded-full bg-sky-400/70 transition-all duration-300"
+              className="wb-beam-progress-fill h-full rounded-full transition-[width] duration-300 ease-out"
               style={{
                 width: progressEvent.totalSlots > 0 ? `${(100 * progressEvent.expandedSlots) / progressEvent.totalSlots}%` : '0%',
               }}
@@ -714,7 +722,7 @@ export function AutoBuilderModal(props: {
             <span>Beam: {progressEvent.beamSize.toLocaleString()}</span>
           </div>
           {rejectStats && totalRejected > 0 ? (
-            <div className="mt-3 border-t border-sky-400/20 pt-2">
+            <div className="mt-3 border-t border-[var(--wb-info-border)] pt-2">
               <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--wb-muted)]">
                 Rejected builds (this pass)
               </div>
@@ -1054,9 +1062,15 @@ export function AutoBuilderModal(props: {
                   >
                     Guild rainbow (+1 each)
                   </ChipButton>
+                  <ChipButton
+                    active={skillpointFeasibilityMode === 'flexible_2'}
+                    onClick={() => setSkillpointFeasibilityMode('flexible_2')}
+                  >
+                    +2 flexible
+                  </ChipButton>
                 </div>
                 <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                  Guild rainbow mode simulates legacy-compatible +1 STR/DEX/INT/DEF/AGI (total +5).
+                  Guild rainbow: +1 each (total +5). +2 flexible: +2 in two skills (total +4).
                 </div>
               </div>
 
@@ -1164,7 +1178,7 @@ export function AutoBuilderModal(props: {
                   ? ` | Strategy: ${solverStrategies.map((s) => SOLVER_STRATEGY_LABELS[s]).join(' → ')}.`
                   : ''}
                 {` | Attack logic: ${attackSpeedConstraintMode === 'or' ? 'Either' : 'Both'}.`}
-                {` | SP mode: ${skillpointFeasibilityMode === 'guild_rainbow' ? 'Guild rainbow (+1 each)' : 'No tomes'}.`}
+                {` | SP mode: ${skillpointFeasibilityMode === 'guild_rainbow' ? 'Guild rainbow (+1 each)' : skillpointFeasibilityMode === 'flexible_2' ? '+2 flexible' : 'No tomes'}.`}
                 {deepFallbackEnabled ? ' | Auto retries with deeper search if fast pass finds 0 candidates.' : ''}
                 {useExhaustiveSmallPool ? ` | Exact enumeration is used automatically when pool combinations are <= ${Math.round(exhaustiveStateLimit).toLocaleString()}.` : ''}
               </div>
@@ -1174,51 +1188,80 @@ export function AutoBuilderModal(props: {
 
         <div className="h-full min-h-0 min-w-0">
           <div className="wb-card flex h-full min-h-0 flex-col overflow-hidden p-3">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="text-sm font-semibold">Candidates</div>
-              <div className="text-xs text-[var(--wb-muted)]">{results.length} shown</div>
-            </div>
-
-            <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 wb-scrollbar">
-              {results.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
-                  Run Build Solver to generate candidate builds.
-                </div>
-              ) : (
-                results.map((candidate, index) => (
-                  <div key={`${candidate.score}-${index}`} className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold">
-                          #{index + 1} | Score {Math.round(candidate.score).toLocaleString()}
-                        </div>
-                        <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                          Base DPS {Math.round(candidate.summary.derived.legacyBaseDps)} | EHP {Math.round(candidate.summary.derived.legacyEhp)} | Req {candidate.summary.derived.reqTotal} | MR {candidate.summary.aggregated.mr}
-                        </div>
-                        <div className="mt-1 text-xs text-emerald-200">
-                          SP Valid | Assigned SP {Math.round(candidate.summary.derived.assignedSkillPointsRequired)}
-                        </div>
-                      </div>
-                      <Button className="px-2 py-1 text-xs" onClick={() => props.onLoadCandidate(candidate)}>
-                        Load into Workbench
-                      </Button>
+            {(() => {
+              const isPreview = running && previewCandidates.length > 0;
+              const shownCandidates = (isPreview ? previewCandidates.slice(0, 2) : results);
+              return (
+                <>
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="text-sm font-semibold">
+                      Candidates{' '}
+                      {isPreview ? (
+                        <span className="text-[11px] text-[var(--wb-muted)]">(live preview; may be partial)</span>
+                      ) : null}
                     </div>
-                    <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
-                      {ITEM_SLOTS.map((slot) => (
-                        <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1">
-                          <div className="text-[10px] uppercase tracking-wide text-[var(--wb-muted)]">{slot}</div>
-                          <div className="truncate">
-                            {candidate.slots[slot] != null
-                              ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
-                              : 'Empty'}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="text-xs text-[var(--wb-muted)]">
+                      {shownCandidates.length} shown
                     </div>
                   </div>
-                ))
-              )}
-            </div>
+
+                  <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 wb-scrollbar">
+                    {shownCandidates.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
+                        Run Build Solver to generate candidate builds.
+                      </div>
+                    ) : (
+                      shownCandidates.map((candidate, index) => (
+                        <div
+                          key={`${candidate.score}-${index}`}
+                          className={
+                            isPreview
+                              ? 'rounded-xl border border-[var(--wb-info-border)] bg-[var(--wb-info-soft)] p-3'
+                              : 'rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3'
+                          }
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-semibold">
+                                #{index + 1} | Score {Math.round(candidate.score).toLocaleString()}
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                                HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                              </div>
+                              <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                                SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
+                              </div>
+                              {isPreview ? (
+                                <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
+                                  Live preview only – may not be a complete or fully feasible build.
+                                </div>
+                              ) : null}
+                            </div>
+                            {!isPreview ? (
+                              <Button className="px-2 py-1 text-xs" onClick={() => props.onLoadCandidate(candidate)}>
+                                Load into Workbench
+                              </Button>
+                            ) : null}
+                          </div>
+                          <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
+                            {ITEM_SLOTS.map((slot) => (
+                              <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1">
+                                <div className="text-[10px] uppercase tracking-wide text-[var(--wb-muted)]">{slot}</div>
+                                <div className="truncate">
+                                  {candidate.slots[slot] != null
+                                    ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
+                                    : 'Empty'}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              );
+            })()}
             {statusMessage ? (
               <details
                 className={`mt-2 rounded-xl border p-2 ${

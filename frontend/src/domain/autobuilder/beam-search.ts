@@ -3,7 +3,7 @@ import { DEFAULT_AUTO_BUILDER_WEIGHTS, type AutoBuilderWeights } from '@/domain/
 import { scoreSummary } from '@/domain/autobuilder/scoring';
 import type { CatalogSnapshot, ItemSlot, NormalizedItem } from '@/domain/items/types';
 import { ITEM_SLOTS, itemCanBeWornByClass, slotToCategory } from '@/domain/items/types';
-import { evaluateBuild, evaluateBuildSkillpointFeasibility } from '@/domain/build/build-metrics';
+import { evaluateBuild, evaluateBuildSkillpointFeasibility, skillpointOptionsFromTomeMode } from '@/domain/build/build-metrics';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
 
 interface BeamNode {
@@ -16,6 +16,35 @@ interface BeamNode {
   atkTierAssigned?: number;
   /** Running totals for Advanced: Specific ID min/max constraints (customNumericRanges). */
   customTotals?: number[];
+}
+
+function buildPreviewCandidatesFromBeam(
+  beam: BeamNode[],
+  catalog: CatalogSnapshot,
+  constraints: AutoBuildConstraints,
+  limit: number,
+): AutoBuildCandidate[] {
+  if (!beam.length || limit <= 0) return [];
+  const sorted = [...beam].sort((a, b) => b.roughScore - a.roughScore).slice(0, limit);
+  const previews: AutoBuildCandidate[] = [];
+  for (const node of sorted) {
+    const summary = evaluateBuild(
+      {
+        slots: node.slots,
+        level: constraints.level,
+        characterClass: constraints.characterClass,
+      },
+      catalog,
+    );
+    const { score, breakdown } = scoreSummary(summary, constraints.weights, constraints);
+    previews.push({
+      slots: { ...node.slots },
+      score,
+      scoreBreakdown: breakdown,
+      summary,
+    });
+  }
+  return previews;
 }
 function computeActiveSetCounts(
   slots: WorkbenchSnapshot['slots'],
@@ -57,9 +86,6 @@ function wouldCreateIllegalCombo(
   }
   return meta.illegalCounts.includes(existingCount + 1);
 }
-
-const NO_TOME_SKILLPOINT_ASSIST: [number, number, number, number, number] = [0, 0, 0, 0, 0];
-const GUILD_RAINBOW_TOME_SKILLPOINT_ASSIST: [number, number, number, number, number] = [1, 1, 1, 1, 1];
 
 type SkillStatKey = 'str' | 'dex' | 'int' | 'def' | 'agi';
 
@@ -112,10 +138,8 @@ interface FinalHardConstraintCheck {
 const SKILL_STATS: SkillStatKey[] = ['str', 'dex', 'int', 'def', 'agi'];
 const WEAPON_ATTACK_SPEED_ORDER = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
 
-function skillpointAssistFromMode(constraints: AutoBuildConstraints): [number, number, number, number, number] {
-  return constraints.skillpointFeasibilityMode === 'guild_rainbow'
-    ? GUILD_RAINBOW_TOME_SKILLPOINT_ASSIST
-    : NO_TOME_SKILLPOINT_ASSIST;
+function skillpointFeasibilityOptionsFromMode(constraints: AutoBuildConstraints) {
+  return skillpointOptionsFromTomeMode(constraints.skillpointFeasibilityMode, constraints.level);
 }
 
 function normalizedAtkTier(item: NormalizedItem): number {
@@ -1262,7 +1286,7 @@ function finalizeBeamCandidates(params: {
   beam: BeamNode[];
   catalog: CatalogSnapshot;
   constraints: AutoBuildConstraints;
-  skillpointAssist?: [number, number, number, number, number] | null;
+  skillpointFeasibilityOptions?: Parameters<typeof evaluateBuild>[2]['skillpointFeasibility'] | null;
   signal?: AbortSignal;
 }): {
   candidates: AutoBuildCandidate[];
@@ -1278,8 +1302,8 @@ function finalizeBeamCandidates(params: {
     thresholdFailureExample?: string;
   };
 } {
-  const { beam, catalog, constraints, skillpointAssist, signal } = params;
-  const resolvedSkillpointAssist = skillpointAssist ?? skillpointAssistFromMode(constraints);
+  const { beam, catalog, constraints, skillpointFeasibilityOptions, signal } = params;
+  const resolvedSpOpts = skillpointFeasibilityOptions ?? skillpointFeasibilityOptionsFromMode(constraints);
   const candidates: AutoBuildCandidate[] = [];
   const seenCandidateKeys = new Set<string>();
   const rejectStats = {
@@ -1306,7 +1330,7 @@ function finalizeBeamCandidates(params: {
         characterClass: constraints.characterClass,
       },
       catalog,
-      { skillpointFeasibility: { extraBaseSkillPoints: resolvedSkillpointAssist } },
+      { skillpointFeasibility: resolvedSpOpts },
     );
     if (!summary.derived.skillpointFeasible) {
       rejectStats.spInvalid++;
@@ -1378,7 +1402,7 @@ function runFeasibilityBiasedBeamSearch(params: {
     onProgress,
     signal,
   } = params;
-  const skillpointAssist = skillpointAssistFromMode(constraints);
+  const skillpointFeasibilityOptions = skillpointFeasibilityOptionsFromMode(constraints);
   const suffixMax = optimisticSuffixMax(slotOrder, candidatePools);
   const atkTierBounds =
     attackSpeedCtx || atkTierRequirement.hasConstraint
@@ -1501,7 +1525,7 @@ function runFeasibilityBiasedBeamSearch(params: {
           nextSlots,
           catalog,
           constraints.level,
-          { extraBaseSkillPoints: skillpointAssist },
+          skillpointFeasibilityOptions,
         );
         const nextRoughScore = node.roughScore + entry.rough;
         nextBeam.push({
@@ -1573,6 +1597,7 @@ function runFeasibilityBiasedBeamSearch(params: {
       totalSlots: slotOrder.length,
       expandedSlots: orderIndex + 1,
       detail: `feasibility-first | branchCap=${perNodeBranchCap}${focusStats.length > 0 ? ` | focus=${focusStats.join('/')}` : ''}${attackSpeedCtx ? ` | atkSpeed=${constraints.weaponAttackSpeeds.join('/')}` : ''}`,
+      previewCandidates: buildPreviewCandidatesFromBeam(beam, catalog, constraints, 2),
     });
   }
 
@@ -1588,7 +1613,7 @@ function enumerateExactCandidates(params: {
   onProgress?: (event: AutoBuildProgressEvent) => void;
 }): AutoBuildCandidate[] {
   const { slotOrder, candidatePools, baseSlots, catalog, constraints, signal, onProgress } = params;
-  const skillpointAssist = skillpointAssistFromMode(constraints);
+  const skillpointFeasibilityOptions = skillpointFeasibilityOptionsFromMode(constraints);
   const candidates: AutoBuildCandidate[] = [];
   const seenCandidateKeys = new Set<string>();
   let processedStates = 0;
@@ -1611,7 +1636,7 @@ function enumerateExactCandidates(params: {
       const summary = evaluateBuild(
         { slots, level: constraints.level, characterClass: constraints.characterClass },
         catalog,
-        { skillpointFeasibility: { extraBaseSkillPoints: skillpointAssist } },
+        { skillpointFeasibility: skillpointFeasibilityOptions },
       );
       if (!summary.derived.skillpointFeasible) {
         rejectedSpInvalid++;
@@ -1710,7 +1735,7 @@ function runDeterministicFallbackSearch(params: {
     signal,
     timeCapMs = 2000,
   } = params;
-  const skillpointAssist = skillpointAssistFromMode(constraints);
+  const skillpointFeasibilityOptions = skillpointFeasibilityOptionsFromMode(constraints);
   const sortedPools = new Map<ItemSlot, Array<{ id: number; rough: number }>>();
   for (const slot of slotOrder) {
     const pool = candidatePools.get(slot) ?? [];
@@ -1750,7 +1775,7 @@ function runDeterministicFallbackSearch(params: {
       const summary = evaluateBuild(
         { slots, level: constraints.level, characterClass: constraints.characterClass },
         catalog,
-        { skillpointFeasibility: { extraBaseSkillPoints: skillpointAssist } },
+        { skillpointFeasibility: skillpointFeasibilityOptions },
       );
       if (!summary.derived.skillpointFeasible) return;
       const hardCheck = validateFinalHardConstraints(slots, catalog, constraints, summary);
@@ -1821,7 +1846,7 @@ function runDeterministicFallbackSearch(params: {
         nextSlots,
         catalog,
         constraints.level,
-        { extraBaseSkillPoints: skillpointAssist },
+        skillpointFeasibilityOptions,
       );
       if (!partial.feasible) continue;
 
@@ -2189,6 +2214,7 @@ export function runAutoBuildBeamSearch(params: {
       totalSlots: slotOrder.length,
       expandedSlots: orderIndex + 1,
       detail: `branchCap=${perNodeBranchCap}${attackSpeedCtx?.preferredDirection ? ` | atkSpeedTarget=${constraints.weaponAttackSpeeds.join('/')}` : ''}`,
+      previewCandidates: buildPreviewCandidatesFromBeam(beam, catalog, constraints, 2),
     });
   }
 

@@ -74,7 +74,7 @@ function chooseEquipSlotForItem(
   return empty ?? candidates[0] ?? null;
 }
 
-function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' | 'binsByCategory' | 'locks' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash'>): WorkbenchSnapshot {
+function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' | 'binsByCategory' | 'locks' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash' | 'skillpointTomeMode'>): WorkbenchSnapshot {
   return {
     slots: { ...store.slots },
     craftedSlots: { ...store.craftedSlots },
@@ -94,6 +94,7 @@ function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' 
     selectedSlot: store.selectedSlot,
     comparePreview: { ...store.comparePreview },
     legacyHash: store.legacyHash,
+    skillpointTomeMode: store.skillpointTomeMode ?? 'no_tomes',
   };
 }
 
@@ -141,10 +142,12 @@ export function App() {
       selectedSlot: state.selectedSlot,
       comparePreview: state.comparePreview,
       legacyHash: state.legacyHash,
+      skillpointTomeMode: state.skillpointTomeMode,
       undoStack: state.undoStack,
       redoStack: state.redoStack,
       setLevel: state.setLevel,
       setCharacterClass: state.setCharacterClass,
+      setSkillpointTomeMode: state.setSkillpointTomeMode,
       setSelectedSlot: state.setSelectedSlot,
       setComparePreview: state.setComparePreview,
       pinItem: state.pinItem,
@@ -324,6 +327,7 @@ export function App() {
         characterClass: snapshot.characterClass,
       },
       catalog,
+      { skillpointTomeMode: snapshot.skillpointTomeMode ?? 'no_tomes' },
     );
   }, [catalog, snapshot]);
 
@@ -356,6 +360,7 @@ export function App() {
         characterClass: snapshot.characterClass,
       },
       catalog,
+      { skillpointTomeMode: snapshot.skillpointTomeMode ?? 'no_tomes' },
     );
   }, [catalog, summary, snapshot]);
 
@@ -639,6 +644,20 @@ export function App() {
                   value={snapshot.level}
                   onChange={(e) => store.setLevel(Number(e.target.value))}
                 />
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-[var(--wb-muted)]" title="Assume tomes for SP feasibility">
+                  SP Tomes
+                </label>
+                <select
+                  className="wb-select w-36"
+                  value={snapshot.skillpointTomeMode ?? 'no_tomes'}
+                  onChange={(e) => store.setSkillpointTomeMode((e.target.value || 'no_tomes') as WorkbenchSnapshot['skillpointTomeMode'])}
+                >
+                  <option value="no_tomes">None (200)</option>
+                  <option value="guild_rainbow">Guild rainbow (+1 each)</option>
+                  <option value="flexible_2">+2 flexible</option>
+                </select>
               </div>
               <Button variant="ghost" onClick={shareWorkbench}>
                 <Link2 size={13} className="mr-1 inline" />

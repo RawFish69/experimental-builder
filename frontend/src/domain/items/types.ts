@@ -105,6 +105,12 @@ export interface NormalizedItem {
   deprecated: boolean;
   numeric: ItemNumericStats;
   numericIndex: Record<string, number>;
+  /**
+   * If true, treat rolled IDs on this item as fixed at their base values
+   * (i.e. do NOT apply base→max-roll conversion for rolled stats).
+   * Mirrors WynnBuilder's per-item fixID / identified semantics where available.
+   */
+  fixRolledIds?: boolean;
   searchText: string;
   majorIdsText: string;
   roughScoreFields: RoughScoreFields;

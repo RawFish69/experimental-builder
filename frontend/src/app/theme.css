@@ -726,6 +726,59 @@ a {
   }
 }
 
+@keyframes wb-progress-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes wb-progress-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+.wb-beam-progress {
+  border: 1px solid var(--wb-info-border);
+  background: var(--wb-info-soft);
+  box-shadow: 0 0 12px var(--wb-info-soft);
+}
+
+.wb-beam-progress-track {
+  background: var(--wb-surface-strong);
+}
+
+.wb-beam-progress-fill {
+  background: var(--wb-info);
+  animation: wb-progress-pulse 1.5s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 8px var(--wb-info-soft);
+}
+
+.wb-beam-progress-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 45%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.4) 55%,
+    transparent 100%
+  );
+  animation: wb-progress-shimmer 2s ease-in-out infinite;
+  width: 40%;
+}
+
 .build-solver-logo-btn {
   background: var(--wb-brand-bg);
   border: 1px solid var(--wb-brand-border);

@@ -278,6 +278,11 @@ export function computeCraftedStats(
 
 /**
  * Encode a crafted item into a CR-... hash string (version 2 encoding).
+ *
+ * Uses LSB-first bit storage to match WynnBuilder's BitVector implementation:
+ * append(value, length) stores the LSB of value at the lowest bit index,
+ * and toB64() reads 6 bits at a time with the lowest-index bit as the LSB
+ * of the 6-bit Base64 value.
  */
 export function encodeCraftHash(
   ingredientIds: number[],
@@ -287,48 +292,47 @@ export function encodeCraftHash(
   category: CraftedCategory,
 ): string {
   const ATK_SPD_MAP: Record<string, number> = { SLOW: 0, NORMAL: 1, FAST: 2 };
-  const bits: number[] = [];
 
-  function appendBits(value: number, count: number) {
-    for (let i = count - 1; i >= 0; i--) {
-      bits.push((value >> i) & 1);
+  const words: number[] = [0];
+  let totalBits = 0;
+
+  function append(value: number, count: number) {
+    for (let i = 0; i < count; i++) {
+      const bit = (value >>> i) & 1;
+      const pos = totalBits + i;
+      const wordIdx = pos >>> 5;
+      while (wordIdx >= words.length) words.push(0);
+      if (bit) words[wordIdx] |= 1 << (pos & 31);
     }
+    totalBits += count;
   }
 
-  // Legacy flag = 0
-  appendBits(0, 1);
-  // Version = 2
-  appendBits(2, 7);
-  // 6 ingredient IDs (12 bits each)
-  for (const id of ingredientIds) {
-    appendBits(id, 12);
-  }
-  // Recipe ID (12 bits)
-  appendBits(recipeId, 12);
-  // Material tiers (3 bits each, stored as tier-1)
-  appendBits(matTiers[0] - 1, 3);
-  appendBits(matTiers[1] - 1, 3);
-  // Attack speed (4 bits, weapons only)
+  append(0, 1);   // Legacy flag = 0
+  append(2, 7);   // Version = 2
+  for (const id of ingredientIds) append(id, 12);
+  append(recipeId, 12);
+  append(matTiers[0] - 1, 3);
+  append(matTiers[1] - 1, 3);
   if (category === 'weapon') {
-    appendBits(ATK_SPD_MAP[atkSpd] ?? 0, 4);
-  }
-  // Pad to multiple of 6
-  const remainder = bits.length % 6;
-  if (remainder !== 0) {
-    for (let i = 0; i < 6 - remainder; i++) {
-      bits.push(0);
-    }
+    append(ATK_SPD_MAP[atkSpd] ?? 0, 4);
   }
 
-  // Convert to Base64
-  const B64_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-';
+  // Pad to multiple of 6
+  const rem = totalBits % 6;
+  if (rem !== 0) append(0, 6 - rem);
+
+  // Convert to Base64 (6 bits at a time, LSB = lowest index)
+  const B64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-';
   let result = '';
-  for (let i = 0; i < bits.length; i += 6) {
+  for (let i = 0; i < totalBits; i += 6) {
     let val = 0;
     for (let j = 0; j < 6; j++) {
-      val = (val << 1) | (bits[i + j] ?? 0);
+      const pos = i + j;
+      if (pos < totalBits) {
+        val |= ((words[pos >>> 5] >>> (pos & 31)) & 1) << j;
+      }
     }
-    result += B64_CHARS[val];
+    result += B64[val];
   }
 
   return 'CR-' + result;

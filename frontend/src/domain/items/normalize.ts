@@ -50,9 +50,60 @@ const NUMERIC_INDEX_KEYS = [
   'nDamPct',
   'slots',
   'lvl',
-  // Spell cost (Legacy: 1st–4th Spell Cost % and Raw)
-  'spPct1', 'spRaw1', 'spPct2', 'spRaw2', 'spPct3', 'spRaw3', 'spPct4', 'spRaw4',
 ];
+
+// Rolled ID keys whose values in compress.json are base rolls and should be
+// converted to max-rolls using WynnBuilder's expandItem logic.
+// See hppeng-wynn.github.io/js/build_utils.js (rolledIDs / expandItem).
+const ROLLED_NUMERIC_KEYS: (keyof ItemNumericStats)[] = [
+  'hpBonus',
+  'hprRaw',
+  'hprPct',
+  'mr',
+  'ms',
+  'ls',
+  'sdPct',
+  'sdRaw',
+  'mdPct',
+  'mdRaw',
+  'poison',
+  'spd',
+  'atkTier',
+  'eDamPct',
+  'tDamPct',
+  'wDamPct',
+  'fDamPct',
+  'aDamPct',
+  'damPct',
+];
+
+function idRoundLikeWynnbuilder(value: number): number {
+  const rounded = Math.round(value);
+  if (rounded === 0 && value !== 0) {
+    return value > 0 ? 1 : -1;
+  }
+  return rounded;
+}
+
+function maxRollFromBase(_idKey: keyof ItemNumericStats, base: number): number {
+  if (!Number.isFinite(base) || base === 0) return 0;
+  const isPositive = base > 0;
+  if (isPositive) {
+    // Positive rolled IDs: maxRoll = idRound(base * 1.3)
+    return idRoundLikeWynnbuilder(base * 1.3);
+  } else {
+    // Negative rolled IDs: maxRoll = idRound(base * 0.7)
+    return idRoundLikeWynnbuilder(base * 0.7);
+  }
+}
+
+// Per-item overrides for items whose rolled IDs should be treated as fixed
+// (i.e. no base→max-roll conversion), even if they use rolled ID keys.
+// This mirrors WynnBuilder's fixID / identified semantics where our data
+// does not expose those flags directly.
+const FIXED_ID_ITEM_NAMES = new Set<string>([
+  'Twilight-Gilded Cloak',
+]);
 
 function asNumber(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -178,6 +229,23 @@ export function normalizeItem(raw: Record<string, unknown>): NormalizedItem | nu
   const numeric = pickStats(raw);
   const numericIndex = buildNumericIndex(raw);
 
+  const hasFixIdFlag = Boolean((raw as { fixID?: unknown }).fixID) || Boolean((raw as { identified?: unknown }).identified);
+  const fixedByName = FIXED_ID_ITEM_NAMES.has(displayName);
+  const fixRolledIds = hasFixIdFlag || fixedByName;
+
+  // Convert rolled IDs from base → max-roll, mirroring WynnBuilder's expandItem,
+  // unless this item is marked as having fixed rolled IDs.
+  if (!fixRolledIds) {
+    for (const key of ROLLED_NUMERIC_KEYS) {
+      const base = numeric[key];
+      const max = maxRollFromBase(key, base);
+      numeric[key] = max;
+      if (Object.prototype.hasOwnProperty.call(numericIndex, key)) {
+        numericIndex[key] = max;
+      }
+    }
+  }
+
   const roughScoreFields = {
     baseDps: numeric.baseDps,
     offense: numericIndex.offenseScore,
@@ -215,6 +283,7 @@ export function normalizeItem(raw: Record<string, unknown>): NormalizedItem | nu
     deprecated: asString(raw.restrict).toUpperCase() === 'DEPRECATED',
     numeric,
     numericIndex,
+    fixRolledIds,
     searchText: textFields.filter(Boolean).join(' ').toLowerCase(),
     majorIdsText: majorIds.join(' ').toLowerCase(),
     roughScoreFields,

@@ -66,6 +66,8 @@ export interface CraftedSlotInfo {
   lvl: number;
 }
 
+export type SkillpointTomeMode = 'no_tomes' | 'guild_rainbow' | 'flexible_2';
+
 export interface WorkbenchSnapshot {
   slots: Record<ItemSlot, number | null>;
   craftedSlots: Partial<Record<ItemSlot, CraftedSlotInfo>>;
@@ -76,6 +78,8 @@ export interface WorkbenchSnapshot {
   selectedSlot: ItemSlot | null;
   comparePreview: ComparePreview;
   legacyHash: string | null;
+  /** Assume tomes for SP feasibility: no_tomes (200), guild_rainbow (+1 each = +5), flexible_2 (+2 in two = +4). */
+  skillpointTomeMode?: SkillpointTomeMode;
 }
 
 export interface WorkbenchBuildState extends WorkbenchSnapshot {
