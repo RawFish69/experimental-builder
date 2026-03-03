@@ -252,8 +252,8 @@ export function AutoBuilderModal(props: {
   const reasonCodeRef = useRef<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const hasAdvancedIdMinMax = customIdThresholds.some(
-    (row) => row.key && row.min != null && row.max != null,
+  const hasAdvancedIdThresholds = customIdThresholds.some(
+    (row) => row.key && (row.min != null || row.max != null),
   );
   const customIdThresholdSeqRef = useRef(1);
 
@@ -1092,7 +1092,7 @@ export function AutoBuilderModal(props: {
                 <summary className="cursor-pointer text-sm font-medium">Advanced: Specific ID Min / Max</summary>
                 <div className="mt-3 grid gap-3">
                   <div className="text-xs text-[var(--wb-muted)]">
-                    Set build-wide min/max totals for any numeric ID (e.g. `mr`, `ms`, `spd`, `reqTotal`, `sdPct`, `poison`, `atkTier`). These are hard constraints.
+                    Set build-wide min/max totals for any numeric ID (e.g. `mr`, `ms`, `spd`, `reqTotal`, `sdPct`, `poison`, `atkTier`). Any Advanced ID threshold makes Advanced IDs the primary solver objective; non-Constraints goals only affect tie-breakers. The Constraints goal still runs in pure custom-objective mode.
                   </div>
                   {customIdThresholds.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-[var(--wb-border-muted)] px-3 py-2 text-xs text-[var(--wb-muted)]">
@@ -1165,10 +1165,10 @@ export function AutoBuilderModal(props: {
                       Add ID Threshold
                     </Button>
                   </div>
-                  {primaryPreset === 'constraints' && !hasAdvancedIdMinMax ? (
+                  {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
                     <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] text-amber-50">
-                      Advanced IDs preset is selected as Primary Goal, but no ID has both Min and Max set.
-                      Add at least one ID with a Min and Max, or switch primary goal. You can still run the solver without this.
+                      Constraints is pure Advanced-ID mode, but no Advanced ID thresholds are set.
+                      Add at least one Min or Max threshold, or switch primary goal. You can still run the solver without this.
                     </div>
                   ) : null}
                 </div>

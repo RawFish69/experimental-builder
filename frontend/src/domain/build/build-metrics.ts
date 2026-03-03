@@ -280,8 +280,23 @@ export function evaluateBuildSkillpointFeasibility(
 }
 
 const GUILD_RAINBOW_EXTRA: SkillVec = [1, 1, 1, 1, 1];
-/** Guild tome: +2 in two skills = +4 total. (Rainbow is +1 each = +5.) */
-const FLEXIBLE_2_EXTRA_AVAILABLE = 4;
+
+/**
+ * All C(5,2) = 10 combinations of placing +2 in exactly two of the five skill stats.
+ * Order: [str, dex, int, def, agi].
+ */
+const FLEXIBLE_2_COMBINATIONS: SkillVec[] = [
+  [2, 2, 0, 0, 0], // str+dex
+  [2, 0, 2, 0, 0], // str+int
+  [2, 0, 0, 2, 0], // str+def
+  [2, 0, 0, 0, 2], // str+agi
+  [0, 2, 2, 0, 0], // dex+int
+  [0, 2, 0, 2, 0], // dex+def
+  [0, 2, 0, 0, 2], // dex+agi
+  [0, 0, 2, 2, 0], // int+def
+  [0, 0, 2, 0, 2], // int+agi
+  [0, 0, 0, 2, 2], // def+agi
+];
 
 export function skillpointOptionsFromTomeMode(
   mode: SkillpointTomeMode,
@@ -291,10 +306,62 @@ export function skillpointOptionsFromTomeMode(
     case 'guild_rainbow':
       return { extraBaseSkillPoints: GUILD_RAINBOW_EXTRA };
     case 'flexible_2':
-      return { availableSkillPointsOverride: levelToAvailableSkillPoints(level) + FLEXIBLE_2_EXTRA_AVAILABLE };
+      // For non-combinatorial callers, use the first combination as a default.
+      // Callers that need exact validation should use evaluateBuildSkillpointFeasibilityWithTomeMode.
+      return { extraBaseSkillPoints: FLEXIBLE_2_COMBINATIONS[0] };
     default:
       return {};
   }
+}
+
+/**
+ * Evaluate SP feasibility for the flexible_2 tome mode by trying all 10 combinations
+ * of placing +2 in exactly two of the five skill stats. Returns feasible if ANY
+ * combination works, picking the one with the lowest required assigned SP.
+ */
+function evaluateFlexible2Feasibility(
+  items: NormalizedItem[],
+  level: number,
+): EquipFeasibilityResult {
+  let bestResult: EquipFeasibilityResult = { feasible: false, assignedTotal: Infinity, assignedByStat: null };
+  for (const combo of FLEXIBLE_2_COMBINATIONS) {
+    const result = estimateEquipFeasibility(items, level, {
+      extraBaseSkillPoints: combo,
+    });
+    if (result.feasible) {
+      if (result.assignedTotal < bestResult.assignedTotal) {
+        bestResult = result;
+      }
+      // Short-circuit: if we found a feasible result with 0 extra assigned, can't do better
+      if (bestResult.assignedTotal === 0) break;
+    }
+  }
+  return bestResult;
+}
+
+/**
+ * Evaluate SP feasibility using the correct tome model.
+ * For flexible_2, tries all C(5,2)=10 combinations of +2 in two skills.
+ * For other modes, delegates to the standard single-options path.
+ */
+export function evaluateBuildSkillpointFeasibilityWithTomeMode(
+  slots: BuildEvaluationInput['slots'],
+  catalog: CatalogSnapshot,
+  level: number,
+  mode: SkillpointTomeMode,
+): EquipFeasibilityResult {
+  if (mode === 'flexible_2') {
+    const items: NormalizedItem[] = [];
+    for (const slot of ITEM_SLOTS) {
+      const itemId = slots[slot];
+      if (itemId == null) continue;
+      const item = catalog.itemsById.get(itemId);
+      if (item) items.push(item);
+    }
+    return evaluateFlexible2Feasibility(items, level);
+  }
+  const options = skillpointOptionsFromTomeMode(mode, level);
+  return evaluateBuildSkillpointFeasibility(slots, catalog, level, options);
 }
 
 export interface BuildEvaluationOptions {
@@ -411,17 +478,29 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     summary.aggregated.skillPoints.def +
     summary.aggregated.skillPoints.agi;
 
-  const spOpts =
-    options.skillpointFeasibility ??
-    (options.skillpointTomeMode
-      ? skillpointOptionsFromTomeMode(options.skillpointTomeMode, input.level)
-      : undefined);
-  const equipFeasibility = evaluateBuildSkillpointFeasibility(
-    input.slots,
-    catalog,
-    input.level,
-    spOpts,
-  );
+  // Use the combinatorial flexible_2 path when that mode is active and no explicit
+  // skillpointFeasibility override is provided.
+  let equipFeasibility: EquipFeasibilityResult;
+  if (!options.skillpointFeasibility && options.skillpointTomeMode === 'flexible_2') {
+    equipFeasibility = evaluateBuildSkillpointFeasibilityWithTomeMode(
+      input.slots,
+      catalog,
+      input.level,
+      'flexible_2',
+    );
+  } else {
+    const spOpts =
+      options.skillpointFeasibility ??
+      (options.skillpointTomeMode
+        ? skillpointOptionsFromTomeMode(options.skillpointTomeMode, input.level)
+        : undefined);
+    equipFeasibility = evaluateBuildSkillpointFeasibility(
+      input.slots,
+      catalog,
+      input.level,
+      spOpts,
+    );
+  }
 
   const { spellPct, spellRaw, meleePct, meleeRaw, baseDps, elemDamPct, genericDamPct } = summary.aggregated.offense;
   const sp = summary.aggregated.skillPoints;

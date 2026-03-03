@@ -1,6 +1,41 @@
 import type { BuildSummary } from '@/domain/build/types';
 import type { AutoBuildConstraints, AutoBuildScoreBreakdown, AutoBuilderWeights } from '@/domain/autobuilder/types';
 
+// ---------------------------------------------------------------------------
+// Priority weighting for Advanced IDs (customNumericRanges)
+// ---------------------------------------------------------------------------
+
+/**
+ * Moderate decay: index 0 -> 1.0, index 1 -> 0.5, index 2 -> 0.33, etc.
+ * Roughly 2x ratio between adjacent priorities.
+ */
+const PRIORITY_DECAY_FACTOR = 1.0;
+
+export function priorityWeight(index: number): number {
+  return 1 / (1 + index * PRIORITY_DECAY_FACTOR);
+}
+
+// ---------------------------------------------------------------------------
+// Fulfillment scoring constants
+// ---------------------------------------------------------------------------
+
+/** Baseline reward for exactly meeting a min target. */
+const FULFILLMENT_BASELINE = 40;
+/** Bonus per unit of stat above the min target. */
+const OVER_PERFORMANCE_PER_UNIT = 6;
+/** Base penalty (scaled by shortfall ratio) when below the min target. */
+export const SHORTFALL_PENALTY_BASE = 80;
+/** Small reward for staying within a max constraint. */
+const MAX_COMPLIANCE_BASELINE = 10;
+/** Penalty per unit of stat above the max target. */
+const MAX_OVERAGE_PENALTY_PER_UNIT = 8;
+export const CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER = 100;
+const ADVANCED_ID_FINAL_GENERIC_SCALE = 0.25;
+
+// ---------------------------------------------------------------------------
+// Sustain & threshold helpers (unchanged from original)
+// ---------------------------------------------------------------------------
+
 export function computeSustain(summary: BuildSummary): number {
   return (
     summary.aggregated.hprTotal * 0.9 +
@@ -46,48 +81,84 @@ export function computeThresholdPenalty(summary: BuildSummary, constraints: Auto
   return penalty;
 }
 
+// ---------------------------------------------------------------------------
+// Fulfillment-based Advanced ID scoring
+// ---------------------------------------------------------------------------
+
 /**
- * Compute how much the build's aggregated stats satisfy customNumericRanges targets.
- *
- * Each custom-min range contributes a positive score proportional to the build's
- * actual value for that stat (not just whether it passes the threshold). This ensures
- * builds that are *more* over the threshold are ranked higher, which keeps the final
- * scoring aligned with what the beam search was optimizing for.
- *
- * Each custom-max range subtracts score for any value above the threshold, rewarding
- * builds that keep that stat low.
+ * Compute a fulfillment-graded score for how well the target values satisfy
+ * customNumericRanges, with priority weighting based on array order.
  */
+export function computeCustomRangeFulfillmentScore(
+  ranges: ReadonlyArray<{ key?: string | null; min?: number; max?: number }>,
+  valueForKey: (key: string) => number,
+): number {
+  if (ranges.length === 0) return 0;
+
+  let score = 0;
+  for (let i = 0; i < ranges.length; i++) {
+    const range = ranges[i];
+    const key = range.key?.trim();
+    if (!key) continue;
+
+    const v = valueForKey(key);
+    const pw = priorityWeight(i);
+
+    if (typeof range.min === 'number') {
+      const target = range.min;
+      if (v >= target) {
+        score += FULFILLMENT_BASELINE * pw;
+        score += (v - target) * OVER_PERFORMANCE_PER_UNIT * pw;
+      } else {
+        const shortfallRatio = (target - v) / Math.max(1, Math.abs(target));
+        score -= shortfallRatio * SHORTFALL_PENALTY_BASE * pw;
+      }
+    }
+
+    if (typeof range.max === 'number') {
+      if (v <= range.max) {
+        score += MAX_COMPLIANCE_BASELINE * pw;
+      } else {
+        score -= (v - range.max) * MAX_OVERAGE_PENALTY_PER_UNIT * pw;
+      }
+    }
+  }
+
+  return score;
+}
+
 export function computeCustomRangeScore(summary: BuildSummary, constraints: AutoBuildConstraints): number {
   const ranges = constraints.target.customNumericRanges ?? [];
   if (ranges.length === 0) return 0;
 
-  // Weight per unit of stat value — chosen to be meaningful relative to the base score
-  // components (legacyBaseDps × 1 ≈ 1000–4000, ehpProxy × 0.6 ≈ 300–1200).
-  // Using 8 per unit means a stat like +mr=3 contributes 24, comparable to sustain bonus.
-  const MIN_SCORE_PER_UNIT = 8;
-  const MAX_PENALTY_PER_UNIT = 4;
-
-  let score = 0;
-  for (const range of ranges) {
-    const key = range.key?.trim();
-    if (!key) continue;
-    // Look up in the build's aggregated/derived stats by key
-    const agg = summary.aggregated as unknown as Record<string, number>;
-    const der = summary.derived as unknown as Record<string, number>;
-    const v: number = agg[key] ?? der[key] ?? 0;
-    if (typeof range.min === 'number') {
-      score += v * MIN_SCORE_PER_UNIT;
-    }
-    if (typeof range.max === 'number' && v > range.max) {
-      score -= (v - range.max) * MAX_PENALTY_PER_UNIT;
-    }
-  }
-  return score;
+  const agg = summary.aggregated as unknown as Record<string, number>;
+  const der = summary.derived as unknown as Record<string, number>;
+  return computeCustomRangeFulfillmentScore(ranges, (key) => agg[key] ?? der[key] ?? 0);
 }
+
+// ---------------------------------------------------------------------------
+// Final build scoring
+// ---------------------------------------------------------------------------
 
 export interface ScoreSummaryOptions {
   /** When true, threshold penalty is skipped (useful for near-miss candidates). */
   skipThresholdPenalty?: boolean;
+}
+
+function genericScoreFromBreakdown(breakdown: AutoBuildScoreBreakdown): number {
+  return (
+    breakdown.legacyBaseDps +
+    breakdown.legacyEhp +
+    breakdown.dpsProxy +
+    breakdown.spellProxy +
+    breakdown.meleeProxy +
+    breakdown.ehpProxy +
+    breakdown.speed +
+    breakdown.sustain +
+    breakdown.skillPointTotal -
+    breakdown.reqPenalty -
+    breakdown.thresholdPenalty
+  );
 }
 
 export function scoreSummary(
@@ -111,6 +182,7 @@ export function scoreSummary(
       skillPointTotal: summary.derived.skillPointTotal * 0.01,
       reqPenalty: summary.derived.reqTotal * 0.01,
       thresholdPenalty: 0,
+      customRangeScore,
     };
     const score = customRangeScore + breakdown.skillPointTotal - breakdown.reqPenalty;
     return { score, breakdown };
@@ -121,11 +193,8 @@ export function scoreSummary(
   const thresholdPenalty = options?.skipThresholdPenalty
     ? 0
     : computeThresholdPenalty(summary, constraints);
-
-  const customMinCount = (constraints.target.customNumericRanges ?? []).filter(
-    (r) => typeof r.min === 'number',
-  ).length;
-  const genericScale = customMinCount > 0 ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
+  const hasCustomRanges = (constraints.target.customNumericRanges?.length ?? 0) > 0;
+  const genericScale = hasCustomRanges ? ADVANCED_ID_FINAL_GENERIC_SCALE : 1;
 
   const breakdown: AutoBuildScoreBreakdown = {
     legacyBaseDps: summary.derived.legacyBaseDps * weights.legacyBaseDps * genericScale,
@@ -139,19 +208,11 @@ export function scoreSummary(
     skillPointTotal: summary.derived.skillPointTotal * weights.skillPointTotal,
     reqPenalty,
     thresholdPenalty,
+    customRangeScore,
   };
-  const score =
-    breakdown.legacyBaseDps +
-    breakdown.legacyEhp +
-    breakdown.dpsProxy +
-    breakdown.spellProxy +
-    breakdown.meleeProxy +
-    breakdown.ehpProxy +
-    breakdown.speed +
-    breakdown.sustain +
-    breakdown.skillPointTotal +
-    customRangeScore -
-    breakdown.reqPenalty -
-    breakdown.thresholdPenalty;
+  const genericTotal = genericScoreFromBreakdown(breakdown);
+  const score = hasCustomRanges
+    ? customRangeScore * CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER + genericTotal
+    : genericTotal + customRangeScore;
   return { score, breakdown };
 }

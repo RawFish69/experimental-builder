@@ -73,6 +73,8 @@ export interface AutoBuildScoreBreakdown {
   skillPointTotal: number;
   reqPenalty: number;
   thresholdPenalty: number;
+  /** Fulfillment-based score for Advanced ID (customNumericRanges) targets with priority weighting. */
+  customRangeScore: number;
 }
 
 export interface AutoBuildCandidate {

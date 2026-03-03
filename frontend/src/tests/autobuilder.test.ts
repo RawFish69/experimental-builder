@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { runAutoBuildBeamSearch } from '@/domain/autobuilder/beam-search';
+import { scoreSummary } from '@/domain/autobuilder/scoring';
 import { DEFAULT_AUTO_BUILD_CONSTRAINTS } from '@/domain/autobuilder/types';
+import { evaluateBuild } from '@/domain/build/build-metrics';
 import { createInitialWorkbenchSnapshot } from '@/domain/build/workbench-state';
 import { makeTestCatalog, rawItem } from '@/tests/helpers';
 
@@ -229,6 +231,166 @@ describe('autobuilder beam search', () => {
 
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((candidate) => candidate.slots.helmet === 1)).toBe(true);
+  });
+
+  it('makes Advanced ID mins primary over Cancer-like EHP helmets', () => {
+    const advancedIdCatalog = makeTestCatalog([
+      rawItem({ id: 1, name: 'Cancer-Like Helm', type: 'helmet', lvl: 100, fixID: true, hp: 5200, hprRaw: 350 }),
+      rawItem({ id: 2, name: 'MR Support Helm', type: 'helmet', lvl: 100, fixID: true, hp: 2100, hprRaw: 120, mr: 16 }),
+      rawItem({ id: 3, name: 'Chest', type: 'chestplate', lvl: 100, fixID: true }),
+      rawItem({ id: 4, name: 'Legs', type: 'leggings', lvl: 100, fixID: true }),
+      rawItem({ id: 5, name: 'Boots', type: 'boots', lvl: 100, fixID: true }),
+      rawItem({ id: 6, name: 'Ring A', type: 'ring', lvl: 100, fixID: true }),
+      rawItem({ id: 7, name: 'Ring B', type: 'ring', lvl: 100, fixID: true }),
+      rawItem({ id: 8, name: 'Brace', type: 'bracelet', lvl: 100, fixID: true }),
+      rawItem({ id: 9, name: 'Neck', type: 'necklace', lvl: 100, fixID: true }),
+      rawItem({ id: 10, name: 'Weapon', type: 'wand', lvl: 100, fixID: true, classReq: 'Mage', averageDps: 1200 }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Mage';
+    base.level = 106;
+    base.slots.weapon = 10;
+    base.locks.weapon = true;
+
+    const withAdvancedIds = runAutoBuildBeamSearch({
+      catalog: advancedIdCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 200,
+        target: {
+          customNumericRanges: [{ key: 'mr', min: 10 }],
+        },
+      },
+    });
+
+    expect(withAdvancedIds.length).toBeGreaterThan(0);
+    expect(withAdvancedIds[0].slots.helmet).toBe(2);
+
+    const withoutAdvancedIds = runAutoBuildBeamSearch({
+      catalog: advancedIdCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 200,
+      },
+    });
+
+    expect(withoutAdvancedIds.length).toBeGreaterThan(0);
+    expect(withoutAdvancedIds[0].slots.helmet).toBe(1);
+  });
+
+  it('ranks overperforming Advanced ID builds above tankier builds that only barely satisfy the min', () => {
+    const rankingCatalog = makeTestCatalog([
+      rawItem({ id: 1, name: 'Tank Helm', type: 'helmet', lvl: 100, fixID: true, hp: 5200, hprRaw: 350 }),
+      rawItem({ id: 2, name: 'Overcap MR Helm', type: 'helmet', lvl: 100, fixID: true, hp: 1800, mr: 7 }),
+      rawItem({ id: 3, name: 'Chest', type: 'chestplate', lvl: 100, fixID: true }),
+      rawItem({ id: 4, name: 'Legs', type: 'leggings', lvl: 100, fixID: true }),
+      rawItem({ id: 5, name: 'Boots', type: 'boots', lvl: 100, fixID: true }),
+      rawItem({ id: 6, name: 'MR Ring', type: 'ring', lvl: 100, fixID: true, mr: 10 }),
+      rawItem({ id: 7, name: 'Ring B', type: 'ring', lvl: 100, fixID: true }),
+      rawItem({ id: 8, name: 'Brace', type: 'bracelet', lvl: 100, fixID: true }),
+      rawItem({ id: 9, name: 'Neck', type: 'necklace', lvl: 100, fixID: true }),
+      rawItem({ id: 10, name: 'Weapon', type: 'wand', lvl: 100, fixID: true, classReq: 'Mage', averageDps: 1200 }),
+    ]);
+
+    const constraints = {
+      ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+      characterClass: 'Mage' as const,
+      level: 106,
+      target: {
+        customNumericRanges: [{ key: 'mr', min: 10 }],
+      },
+    };
+
+    const tankSummary = evaluateBuild({
+      slots: {
+        helmet: 1,
+        chestplate: 3,
+        leggings: 4,
+        boots: 5,
+        ring1: 6,
+        ring2: 7,
+        bracelet: 8,
+        necklace: 9,
+        weapon: 10,
+      },
+      level: 106,
+      characterClass: 'Mage',
+    }, rankingCatalog);
+    const overcapSummary = evaluateBuild({
+      slots: {
+        helmet: 2,
+        chestplate: 3,
+        leggings: 4,
+        boots: 5,
+        ring1: 6,
+        ring2: 7,
+        bracelet: 8,
+        necklace: 9,
+        weapon: 10,
+      },
+      level: 106,
+      characterClass: 'Mage',
+    }, rankingCatalog);
+
+    const tankScore = scoreSummary(tankSummary, constraints.weights, constraints);
+    const overcapScore = scoreSummary(overcapSummary, constraints.weights, constraints);
+
+    expect(tankSummary.aggregated.mr).toBe(10);
+    expect(overcapSummary.aggregated.mr).toBe(17);
+    expect(overcapScore.score).toBeGreaterThan(tankScore.score);
+  });
+
+  it('keeps zero-stat EHP helmets behind valid support helmets in constraint-only mode', () => {
+    const constraintOnlyCatalog = makeTestCatalog([
+      rawItem({ id: 1, name: 'Tank Helm', type: 'helmet', lvl: 100, fixID: true, hp: 5200, hprRaw: 350 }),
+      rawItem({ id: 2, name: 'MR Support Helm', type: 'helmet', lvl: 100, fixID: true, hp: 1800, mr: 16 }),
+      rawItem({ id: 3, name: 'Chest', type: 'chestplate', lvl: 100, fixID: true }),
+      rawItem({ id: 4, name: 'Legs', type: 'leggings', lvl: 100, fixID: true }),
+      rawItem({ id: 5, name: 'Boots', type: 'boots', lvl: 100, fixID: true }),
+      rawItem({ id: 6, name: 'MR Ring', type: 'ring', lvl: 100, fixID: true, mr: 10 }),
+      rawItem({ id: 7, name: 'Ring B', type: 'ring', lvl: 100, fixID: true }),
+      rawItem({ id: 8, name: 'Brace', type: 'bracelet', lvl: 100, fixID: true }),
+      rawItem({ id: 9, name: 'Neck', type: 'necklace', lvl: 100, fixID: true }),
+      rawItem({ id: 10, name: 'Weapon', type: 'wand', lvl: 100, fixID: true, classReq: 'Mage', averageDps: 1200 }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Mage';
+    base.level = 106;
+    base.slots.weapon = 10;
+    base.locks.weapon = true;
+
+    const results = runAutoBuildBeamSearch({
+      catalog: constraintOnlyCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Mage' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 20,
+        beamWidth: 200,
+        constraintOnlyMode: true,
+        target: {
+          customNumericRanges: [{ key: 'mr', min: 10 }],
+        },
+      },
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].summary.aggregated.mr).toBeGreaterThanOrEqual(10);
+    expect(results[0].slots.helmet).toBe(2);
   });
 
   it('enforces final weapon attack speed constraint using total atkTier (not just base weapon speed)', () => {

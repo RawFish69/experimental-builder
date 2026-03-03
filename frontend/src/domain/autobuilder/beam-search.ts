@@ -1,9 +1,15 @@
 import type { AutoBuildCandidate, AutoBuildConstraints, AutoBuildProgressEvent } from '@/domain/autobuilder/types';
 import { DEFAULT_AUTO_BUILDER_WEIGHTS, type AutoBuilderWeights } from '@/domain/autobuilder/types';
-import { scoreSummary } from '@/domain/autobuilder/scoring';
+import {
+  scoreSummary,
+  priorityWeight,
+  SHORTFALL_PENALTY_BASE,
+  CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER,
+  computeCustomRangeFulfillmentScore,
+} from '@/domain/autobuilder/scoring';
 import type { CatalogSnapshot, ItemSlot, NormalizedItem } from '@/domain/items/types';
 import { ITEM_SLOTS, itemCanBeWornByClass, slotToCategory } from '@/domain/items/types';
-import { evaluateBuild, evaluateBuildSkillpointFeasibility, skillpointOptionsFromTomeMode } from '@/domain/build/build-metrics';
+import { evaluateBuild, evaluateBuildSkillpointFeasibility, evaluateBuildSkillpointFeasibilityWithTomeMode, skillpointOptionsFromTomeMode } from '@/domain/build/build-metrics';
 import type { WorkbenchSnapshot } from '@/domain/build/types';
 
 interface BeamNode {
@@ -16,6 +22,8 @@ interface BeamNode {
   atkTierAssigned?: number;
   /** Running totals for Advanced: Specific ID min/max constraints (customNumericRanges). */
   customTotals?: number[];
+  /** Set of required major IDs already satisfied in this partial build. */
+  satisfiedMajorIds?: Set<string>;
 }
 
 function buildPreviewCandidatesFromBeam(
@@ -140,6 +148,32 @@ const WEAPON_ATTACK_SPEED_ORDER = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 
 
 function skillpointFeasibilityOptionsFromMode(constraints: AutoBuildConstraints) {
   return skillpointOptionsFromTomeMode(constraints.skillpointFeasibilityMode, constraints.level);
+}
+
+/**
+ * Evaluate partial or full build SP feasibility respecting the selected tome mode.
+ * For flexible_2, uses the combinatorial approach (tries all 10 placement combinations).
+ * For other modes, delegates to the standard single-options path.
+ */
+function evaluatePartialSpFeasibility(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+  constraints: AutoBuildConstraints,
+): ReturnType<typeof evaluateBuildSkillpointFeasibility> {
+  if (constraints.skillpointFeasibilityMode === 'flexible_2') {
+    return evaluateBuildSkillpointFeasibilityWithTomeMode(
+      slots,
+      catalog,
+      constraints.level,
+      'flexible_2',
+    );
+  }
+  return evaluateBuildSkillpointFeasibility(
+    slots,
+    catalog,
+    constraints.level,
+    skillpointFeasibilityOptionsFromMode(constraints),
+  );
 }
 
 function normalizedAtkTier(item: NormalizedItem): number {
@@ -513,27 +547,23 @@ export function thresholdBiasedWeights(
   return w;
 }
 
-/** When user sets Advanced ID min/max, boost rough score for items that help meet those constraints. */
-const CUSTOM_RANGE_MIN_WEIGHT = 3;
-const CUSTOM_RANGE_MAX_WEIGHT = 2;
-/** Much stronger bias when advanced IDs are the primary goal - ensures mr/hr support items dominate. */
-const CUSTOM_RANGE_MIN_WEIGHT_STRONG = 14;
+const ADVANCED_ID_ROUGH_GENERIC_SCALE = 0.1;
 
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
   const customRanges = constraints.target.customNumericRanges ?? [];
+  const hasCustomRanges = customRanges.length > 0;
+  const customScore = hasCustomRanges
+    ? computeCustomRangeFulfillmentScore(
+        customRanges,
+        (key) => item.numericIndex[key] ?? 0,
+      ) * CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER
+    : 0;
 
   // Pure constraint-satisfaction: score by custom range contributions but also give
   // a small positive baseline for SP-support items (low requirements, SP bonuses)
   // so they aren't obliterated if they have slightly negative custom range values.
   if (constraints.constraintOnlyMode) {
-    let score = 0;
-    for (const range of customRanges) {
-      const key = range.key?.trim();
-      if (!key) continue;
-      const v = item.numericIndex[key] ?? 0;
-      if (typeof range.min === 'number') score += v * CUSTOM_RANGE_MIN_WEIGHT_STRONG;
-      if (typeof range.max === 'number') score -= v * CUSTOM_RANGE_MAX_WEIGHT;
-    }
+    let score = customScore;
     score -= item.roughScoreFields.reqTotal * 0.05;
     // Baseline: items with low requirements and positive SP bonuses get a small
     // floor so they're not pruned just because they lack the target stat.
@@ -543,10 +573,7 @@ function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints)
     return score;
   }
 
-  const hasCustomMins = customRanges.some((r) => typeof r.min === 'number');
-
-  const customMinCount = customRanges.filter((r) => typeof r.min === 'number').length;
-  const genericScale = hasCustomMins ? Math.max(0.15, 1 - customMinCount * 0.2) : 1;
+  const genericScale = hasCustomRanges ? ADVANCED_ID_ROUGH_GENERIC_SCALE : 1;
 
   const defWeight = (constraints.weights.legacyEhp + constraints.weights.ehpProxy) * genericScale;
 
@@ -558,19 +585,7 @@ function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints)
     item.roughScoreFields.utility * constraints.weights.sustain +
     item.roughScoreFields.skillPointTotal * constraints.weights.skillPointTotal -
     item.roughScoreFields.reqTotal * constraints.weights.reqTotalPenalty;
-
-  const minWeight = hasCustomMins ? CUSTOM_RANGE_MIN_WEIGHT_STRONG : CUSTOM_RANGE_MIN_WEIGHT;
-  for (const range of customRanges) {
-    const key = range.key?.trim();
-    if (!key) continue;
-    const v = item.numericIndex[key] ?? 0;
-    if (typeof range.min === 'number') {
-      score += v * minWeight;
-    }
-    if (typeof range.max === 'number') {
-      score -= v * CUSTOM_RANGE_MAX_WEIGHT;
-    }
-  }
+  score += customScore;
   return score;
 }
 
@@ -1029,6 +1044,29 @@ function buildCustomSuffixBounds(params: {
   return { maxSuffix, minSuffix };
 }
 
+/**
+ * Compute an adaptive pool size multiplier based on active constraints.
+ * Grows pools for slots that are critical to unsatisfied constraints (capped at 2×).
+ */
+function computeAdaptivePoolMultiplier(
+  constraints: AutoBuildConstraints,
+  focusStats: SkillStatKey[],
+): number {
+  let multiplier = 1.0;
+
+  const customRanges = constraints.target.customNumericRanges ?? [];
+  const customMinCount = customRanges.filter((r) => typeof r.min === 'number').length;
+  if (customMinCount >= 2) multiplier += 0.3 * customMinCount;
+
+  if (focusStats.length >= 2) multiplier += 0.4;
+
+  if (constraints.weaponAttackSpeeds.length > 0) multiplier += 0.2;
+
+  if (constraints.requiredMajorIds.length > 0) multiplier += 0.3;
+
+  return Math.min(2.0, multiplier);
+}
+
 function buildCandidatePoolForSlot(
   slot: ItemSlot,
   catalog: CatalogSnapshot,
@@ -1144,7 +1182,8 @@ function buildCandidatePoolForSlot(
       }),
     );
 
-  const target = Math.max(10, constraints.topKPerSlot);
+  const adaptiveMultiplier = computeAdaptivePoolMultiplier(constraints, focusStats);
+  const target = Math.max(10, Math.ceil(constraints.topKPerSlot * adaptiveMultiplier));
   const diversityBudget = Math.min(140, Math.max(40, Math.floor(target * 0.8)));
   const desiredPoolSize = Math.min(
     all.length,
@@ -1264,6 +1303,105 @@ function slotsSatisfyRequiredMajorIds(
   return requiredMajorIds.every((majorId) => found.has(majorId));
 }
 
+/**
+ * Pre-compute which required major IDs can be provided by each slot's candidate pool.
+ * Returns an array indexed by slot order position, with each entry being the set of
+ * required major IDs that can be provided by items in that slot's pool.
+ */
+function buildMajorIdReachabilityBySlot(
+  slotOrder: ItemSlot[],
+  candidatePools: Map<ItemSlot, Array<{ id: number; rough: number }>>,
+  catalog: CatalogSnapshot,
+  requiredMajorIds: string[],
+): Array<Set<string>> {
+  if (requiredMajorIds.length === 0) return slotOrder.map(() => new Set());
+  const requiredSet = new Set(requiredMajorIds);
+  return slotOrder.map((slot) => {
+    const pool = candidatePools.get(slot) ?? [];
+    const canProvide = new Set<string>();
+    for (const entry of pool) {
+      const item = catalog.itemsById.get(entry.id);
+      if (!item) continue;
+      for (const mid of item.majorIds) {
+        if (requiredSet.has(mid)) canProvide.add(mid);
+      }
+    }
+    return canProvide;
+  });
+}
+
+/**
+ * Build a suffix union: for each slot index i, which required major IDs can still
+ * be provided by slots i..end. Used for pruning partial builds.
+ */
+function buildMajorIdSuffixReachability(
+  reachabilityBySlot: Array<Set<string>>,
+): Array<Set<string>> {
+  const suffix: Array<Set<string>> = new Array(reachabilityBySlot.length + 1);
+  suffix[reachabilityBySlot.length] = new Set();
+  for (let i = reachabilityBySlot.length - 1; i >= 0; i--) {
+    suffix[i] = new Set([...suffix[i + 1], ...reachabilityBySlot[i]]);
+  }
+  return suffix;
+}
+
+/**
+ * Check if missing required major IDs can still be provided by remaining slots.
+ */
+function canStillSatisfyRequiredMajorIds(
+  satisfied: Set<string> | undefined,
+  requiredMajorIds: string[],
+  suffixReachability: Set<string>,
+): boolean {
+  if (requiredMajorIds.length === 0) return true;
+  for (const id of requiredMajorIds) {
+    if (satisfied?.has(id)) continue;
+    if (!suffixReachability.has(id)) return false;
+  }
+  return true;
+}
+
+/**
+ * Collect which required major IDs are satisfied by a single item.
+ */
+function collectItemMajorIds(
+  item: NormalizedItem | undefined,
+  requiredMajorIds: string[],
+): string[] {
+  if (!item || requiredMajorIds.length === 0) return [];
+  const matched: string[] = [];
+  for (const mid of item.majorIds) {
+    if (requiredMajorIds.includes(mid)) matched.push(mid);
+  }
+  return matched;
+}
+
+/**
+ * Estimate how much score will be lost from custom ranges that can't reach their
+ * targets even with the best remaining items. Returns a non-negative penalty.
+ */
+function computeOptimisticCustomPenalty(
+  currentTotals: number[] | undefined,
+  remainingMaxSuffix: number[],
+  specs: CustomRangeSpec[],
+): number {
+  if (!currentTotals || specs.length === 0) return 0;
+  let penalty = 0;
+  for (let k = 0; k < specs.length; k++) {
+    const spec = specs[k];
+    if (typeof spec.min !== 'number') continue;
+    const optimisticTotal = currentTotals[k] + remainingMaxSuffix[k];
+    if (optimisticTotal < spec.min) {
+      // Even optimistically can't reach the target — estimate shortfall penalty
+      const shortfallRatio = (spec.min - optimisticTotal) / Math.max(1, Math.abs(spec.min));
+      const pw = priorityWeight(k);
+      // Scale penalty to be meaningful in the context of rough scores
+      penalty += shortfallRatio * SHORTFALL_PENALTY_BASE * CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER * pw;
+    }
+  }
+  return penalty;
+}
+
 function optimisticSuffixMax(order: ItemSlot[], candidatePools: Map<ItemSlot, Array<{ id: number; rough: number }>>): number[] {
   const suffix = new Array(order.length + 1).fill(0);
   for (let i = order.length - 1; i >= 0; i--) {
@@ -1330,7 +1468,15 @@ function finalizeBeamCandidates(params: {
   };
 } {
   const { beam, catalog, constraints, skillpointFeasibilityOptions, signal, collectNearMisses } = params;
-  const resolvedSpOpts = skillpointFeasibilityOptions ?? skillpointFeasibilityOptionsFromMode(constraints);
+  // For flexible_2, pass the tome mode so evaluateBuild can use the combinatorial path.
+  const resolvedSpOpts = skillpointFeasibilityOptions ?? (
+    constraints.skillpointFeasibilityMode === 'flexible_2'
+      ? undefined // let evaluateBuild use skillpointTomeMode instead
+      : skillpointFeasibilityOptionsFromMode(constraints)
+  );
+  const resolvedTomeMode = constraints.skillpointFeasibilityMode === 'flexible_2' && !skillpointFeasibilityOptions
+    ? 'flexible_2' as const
+    : undefined;
   const candidates: AutoBuildCandidate[] = [];
   const nearMissCandidates: AutoBuildCandidate[] = [];
   const looserCandidates: AutoBuildCandidate[] = [];
@@ -1371,7 +1517,7 @@ function finalizeBeamCandidates(params: {
         characterClass: constraints.characterClass,
       },
       catalog,
-      { skillpointFeasibility: resolvedSpOpts },
+      { skillpointFeasibility: resolvedSpOpts, skillpointTomeMode: resolvedTomeMode },
     );
 
     const spFailed = !summary.derived.skillpointFeasible;
@@ -1672,18 +1818,20 @@ function runFeasibilityBiasedBeamSearch(params: {
           if (!ok) continue;
         }
 
-        const partialFeasibility = evaluateBuildSkillpointFeasibility(
+        const partialFeasibility = evaluatePartialSpFeasibility(
           nextSlots,
           catalog,
-          constraints.level,
-          skillpointFeasibilityOptions,
+          constraints,
         );
         const nextRoughScore = node.roughScore + entry.rough;
+        const fbCustomPenalty = computeOptimisticCustomPenalty(
+          nextCustomTotals, customBounds.maxSuffix[orderIndex + 1], customSpecs,
+        );
         nextBeam.push({
           slots: nextSlots,
           orderIndex: orderIndex + 1,
           roughScore: nextRoughScore,
-          optimisticBound: nextRoughScore + suffixMax[orderIndex + 1],
+          optimisticBound: nextRoughScore + suffixMax[orderIndex + 1] - fbCustomPenalty,
           feasibilityAssigned: partialFeasibility.feasible ? partialFeasibility.assignedTotal : Infinity,
           focusSupport: nextFocusSupport,
           atkTierAssigned: nextAtkTierAssigned,
@@ -1994,11 +2142,10 @@ function runDeterministicFallbackSearch(params: {
         if (!customOk) continue;
       }
 
-      const partial = evaluateBuildSkillpointFeasibility(
+      const partial = evaluatePartialSpFeasibility(
         nextSlots,
         catalog,
-        constraints.level,
-        skillpointFeasibilityOptions,
+        constraints,
       );
       if (!partial.feasible) continue;
 
@@ -2222,6 +2369,24 @@ export function runAutoBuildBeamSearch(params: {
   const customKeys2 = customSpecs2.map((s) => s.key);
   const customBounds2 = buildCustomSuffixBounds({ slotOrder, candidatePools, catalog, keys: customKeys2 });
 
+  // Pre-compute required major ID reachability for partial pruning
+  const majorIdReachBySlot = buildMajorIdReachabilityBySlot(slotOrder, candidatePools, catalog, constraints.requiredMajorIds);
+  const majorIdSuffixReach = buildMajorIdSuffixReachability(majorIdReachBySlot);
+
+  // Collect initial satisfied major IDs from locked/must-include items
+  const initialSatisfiedMajorIds = new Set<string>();
+  if (constraints.requiredMajorIds.length > 0) {
+    for (const slot of ITEM_SLOTS) {
+      const itemId = baseSlots[slot];
+      if (itemId == null) continue;
+      const item = catalog.itemsById.get(itemId);
+      if (!item) continue;
+      for (const mid of item.majorIds) {
+        if (constraints.requiredMajorIds.includes(mid)) initialSatisfiedMajorIds.add(mid);
+      }
+    }
+  }
+
   let beam: BeamNode[] = [{
     slots: baseSlots,
     orderIndex: 0,
@@ -2229,6 +2394,7 @@ export function runAutoBuildBeamSearch(params: {
     optimisticBound: suffixMax[0],
     atkTierAssigned: 0,
     customTotals: customTotalsFromSlots(baseSlots, catalog, customKeys2),
+    satisfiedMajorIds: initialSatisfiedMajorIds.size > 0 ? initialSatisfiedMajorIds : undefined,
   }];
 
   const atkTierBounds =
@@ -2280,6 +2446,20 @@ export function runAutoBuildBeamSearch(params: {
                 customKeys2.map((k) => (item ? item.numericIndex[k] ?? 0 : 0)),
               )
             : undefined;
+
+        // Prune if required major IDs can no longer be satisfied
+        let nextSatisfiedMajorIds = node.satisfiedMajorIds;
+        if (constraints.requiredMajorIds.length > 0) {
+          const matched = collectItemMajorIds(item, constraints.requiredMajorIds);
+          if (matched.length > 0) {
+            nextSatisfiedMajorIds = new Set(node.satisfiedMajorIds ?? []);
+            for (const mid of matched) nextSatisfiedMajorIds.add(mid);
+          }
+          if (!canStillSatisfyRequiredMajorIds(nextSatisfiedMajorIds, constraints.requiredMajorIds, majorIdSuffixReach[orderIndex + 1])) {
+            continue;
+          }
+        }
+
         if (atkTierBounds) {
           const canReachAttackConstraint = canStillSatisfyCombinedAttackConstraint({
             constraints,
@@ -2308,13 +2488,17 @@ export function runAutoBuildBeamSearch(params: {
           }
           if (!ok) continue;
         }
+        const customPenalty = computeOptimisticCustomPenalty(
+          nextCustomTotals, customBounds2.maxSuffix[orderIndex + 1], customSpecs2,
+        );
         nextBeam.push({
           slots: nextSlots,
           orderIndex: orderIndex + 1,
           roughScore: nextRoughScore,
-          optimisticBound: nextRoughScore + suffixMax[orderIndex + 1],
+          optimisticBound: nextRoughScore + suffixMax[orderIndex + 1] - customPenalty,
           atkTierAssigned: nextAtkTierAssigned,
           customTotals: nextCustomTotals,
+          satisfiedMajorIds: nextSatisfiedMajorIds,
         });
       }
       if (stateBudgetHit) break;
