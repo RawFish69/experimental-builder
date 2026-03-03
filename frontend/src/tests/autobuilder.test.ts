@@ -151,6 +151,180 @@ describe('autobuilder beam search', () => {
     expect(results[0].summary.derived.skillpointFeasible).toBe(true);
   });
 
+  it('keeps accessory support options for SP-tight builds and avoids burdened def-stat distractors', () => {
+    const ringDistractors = Array.from({ length: 14 }, (_, index) =>
+      rawItem({
+        id: 500 + index,
+        name: `Def Distractor Ring ${index + 1}`,
+        type: 'ring',
+        lvl: 100,
+        fixID: true,
+        hpBonus: 2200 - index * 40,
+        def: 20,
+        defReq: 25,
+      }),
+    );
+
+    const accessoryPressureCatalog = makeTestCatalog([
+      rawItem({ id: 101, name: 'Str Support Helm', type: 'helmet', lvl: 100, fixID: true, str: 25 }),
+      rawItem({ id: 102, name: 'Tank Helm', type: 'helmet', lvl: 100, fixID: true, hpBonus: 2800 }),
+      rawItem({
+        id: 103,
+        name: 'Cursed Chest',
+        type: 'chestplate',
+        lvl: 100,
+        fixID: true,
+        strReq: 95,
+        dexReq: 40,
+        agiReq: 40,
+        def: -30,
+      }),
+      rawItem({ id: 104, name: 'Dex Support Legs', type: 'leggings', lvl: 100, fixID: true, dex: 25 }),
+      rawItem({ id: 105, name: 'Tank Legs', type: 'leggings', lvl: 100, fixID: true, hpBonus: 2600 }),
+      rawItem({ id: 106, name: 'Tight Boots', type: 'boots', lvl: 100, fixID: true, dexReq: 95, agiReq: 80 }),
+      rawItem({ id: 107, name: 'Agi Support Ring', type: 'ring', lvl: 100, fixID: true, agi: 20 }),
+      rawItem({ id: 108, name: 'Neutral Ring', type: 'ring', lvl: 100, fixID: true }),
+      ...ringDistractors,
+      rawItem({ id: 120, name: 'Neutral Bracelet', type: 'bracelet', lvl: 100, fixID: true }),
+      rawItem({ id: 121, name: 'Def Bracelet Trap', type: 'bracelet', lvl: 100, fixID: true, hpBonus: 2400, def: 20, defReq: 25 }),
+      rawItem({ id: 130, name: 'Neutral Necklace', type: 'necklace', lvl: 100, fixID: true }),
+      rawItem({ id: 131, name: 'Def Necklace Trap', type: 'necklace', lvl: 100, fixID: true, hpBonus: 2400, def: 20, defReq: 25 }),
+      rawItem({
+        id: 140,
+        name: 'Tight Bow',
+        type: 'bow',
+        lvl: 100,
+        fixID: true,
+        classReq: 'Archer',
+        dexReq: 70,
+        agiReq: 70,
+        averageDps: 3200,
+      }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Archer';
+    base.level = 106;
+    base.slots.chestplate = 103;
+    base.slots.boots = 106;
+    base.slots.weapon = 140;
+    base.locks.chestplate = true;
+    base.locks.boots = true;
+    base.locks.weapon = true;
+
+    const results = runAutoBuildBeamSearch({
+      catalog: accessoryPressureCatalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Archer' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 6,
+        beamWidth: 60,
+        maxStates: 400,
+        useExhaustiveSmallPool: false,
+        exhaustiveStateLimit: 1,
+      },
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].summary.derived.skillpointFeasible).toBe(true);
+    expect(results[0].slots.helmet).toBe(101);
+    expect(results[0].slots.leggings).toBe(104);
+    const chosenRingIds = [results[0].slots.ring1, results[0].slots.ring2];
+    expect(chosenRingIds).toContain(107);
+    expect(chosenRingIds.every((id) => id === 107 || id === 108)).toBe(true);
+    expect(results[0].slots.bracelet).toBe(120);
+    expect(results[0].slots.necklace).toBe(130);
+  });
+
+  it('applies the same burdened-stat avoidance to non-def stats', () => {
+    const ringDistractors = Array.from({ length: 12 }, (_, index) =>
+      rawItem({
+        id: 600 + index,
+        name: `Int Distractor Ring ${index + 1}`,
+        type: 'ring',
+        lvl: 100,
+        fixID: true,
+        hpBonus: 2100 - index * 35,
+        int: 18,
+        intReq: 30,
+      }),
+    );
+
+    const catalog = makeTestCatalog([
+      rawItem({ id: 201, name: 'Str Support Helm', type: 'helmet', lvl: 100, fixID: true, str: 25 }),
+      rawItem({ id: 202, name: 'Tank Helm', type: 'helmet', lvl: 100, fixID: true, hpBonus: 2800 }),
+      rawItem({
+        id: 203,
+        name: 'Cursed Int Chest',
+        type: 'chestplate',
+        lvl: 100,
+        fixID: true,
+        strReq: 95,
+        dexReq: 40,
+        agiReq: 40,
+        int: -30,
+      }),
+      rawItem({ id: 204, name: 'Dex Support Legs', type: 'leggings', lvl: 100, fixID: true, dex: 25 }),
+      rawItem({ id: 205, name: 'Tank Legs', type: 'leggings', lvl: 100, fixID: true, hpBonus: 2600 }),
+      rawItem({ id: 206, name: 'Tight Boots', type: 'boots', lvl: 100, fixID: true, dexReq: 95, agiReq: 80 }),
+      rawItem({ id: 207, name: 'Agi Support Ring', type: 'ring', lvl: 100, fixID: true, agi: 20 }),
+      rawItem({ id: 208, name: 'Neutral Ring', type: 'ring', lvl: 100, fixID: true }),
+      ...ringDistractors,
+      rawItem({ id: 220, name: 'Neutral Bracelet', type: 'bracelet', lvl: 100, fixID: true }),
+      rawItem({ id: 221, name: 'Int Bracelet Trap', type: 'bracelet', lvl: 100, fixID: true, hpBonus: 2400, int: 20, intReq: 25 }),
+      rawItem({ id: 230, name: 'Neutral Necklace', type: 'necklace', lvl: 100, fixID: true }),
+      rawItem({ id: 231, name: 'Int Necklace Trap', type: 'necklace', lvl: 100, fixID: true, hpBonus: 2400, int: 20, intReq: 25 }),
+      rawItem({
+        id: 240,
+        name: 'Tight Bow',
+        type: 'bow',
+        lvl: 100,
+        fixID: true,
+        classReq: 'Archer',
+        dexReq: 70,
+        agiReq: 70,
+        averageDps: 3200,
+      }),
+    ]);
+
+    const base = createInitialWorkbenchSnapshot();
+    base.characterClass = 'Archer';
+    base.level = 106;
+    base.slots.chestplate = 203;
+    base.slots.boots = 206;
+    base.slots.weapon = 240;
+    base.locks.chestplate = true;
+    base.locks.boots = true;
+    base.locks.weapon = true;
+
+    const results = runAutoBuildBeamSearch({
+      catalog,
+      baseWorkbench: base,
+      constraints: {
+        ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
+        characterClass: 'Archer' as const,
+        level: 106,
+        topN: 5,
+        topKPerSlot: 6,
+        beamWidth: 60,
+        maxStates: 400,
+        useExhaustiveSmallPool: false,
+        exhaustiveStateLimit: 1,
+      },
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0].summary.derived.skillpointFeasible).toBe(true);
+    expect(results[0].slots.helmet).toBe(201);
+    expect(results[0].slots.leggings).toBe(204);
+    expect([results[0].slots.ring1, results[0].slots.ring2]).toContain(207);
+    expect(results[0].slots.bracelet).toBe(220);
+    expect(results[0].slots.necklace).toBe(230);
+  });
+
   it('treats min thresholds as hard constraints on final candidates', () => {
     const thresholdCatalog = makeTestCatalog([
       rawItem({ id: 1, name: 'Helm', type: 'helmet', lvl: 100 }),

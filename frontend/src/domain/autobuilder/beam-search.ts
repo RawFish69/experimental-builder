@@ -20,6 +20,8 @@ interface BeamNode {
   feasibilityAssigned?: number;
   focusSupport?: number[];
   atkTierAssigned?: number;
+  skillBonuses?: number[];
+  burdenPenalty?: number;
   /** Running totals for Advanced: Specific ID min/max constraints (customNumericRanges). */
   customTotals?: number[];
   /** Set of required major IDs already satisfied in this partial build. */
@@ -97,6 +99,12 @@ function wouldCreateIllegalCombo(
 
 type SkillStatKey = 'str' | 'dex' | 'int' | 'def' | 'agi';
 
+interface SkillpointPressureContext {
+  supportStats: SkillStatKey[];
+  avoidStats: SkillStatKey[];
+  isTight: boolean;
+}
+
 interface CandidatePoolEntry {
   id: number;
   rough: number;
@@ -112,6 +120,7 @@ interface CandidatePoolEntry {
   spDef: number;
   spAgi: number;
   supportFocus: number;
+  pressureSupport: number;
 }
 
 interface CustomRangeSpec {
@@ -196,6 +205,21 @@ function positiveStatBonus(item: NormalizedItem, stat: SkillStatKey): number {
   }
 }
 
+function signedStatBonus(item: NormalizedItem, stat: SkillStatKey): number {
+  switch (stat) {
+    case 'str':
+      return item.numeric.spStr;
+    case 'dex':
+      return item.numeric.spDex;
+    case 'int':
+      return item.numeric.spInt;
+    case 'def':
+      return item.numeric.spDef;
+    case 'agi':
+      return item.numeric.spAgi;
+  }
+}
+
 function skillReq(item: NormalizedItem, stat: SkillStatKey): number {
   switch (stat) {
     case 'str':
@@ -211,6 +235,48 @@ function skillReq(item: NormalizedItem, stat: SkillStatKey): number {
   }
 }
 
+function skillBonusVectorForItem(item: NormalizedItem): number[] {
+  return [
+    item.numeric.spStr,
+    item.numeric.spDex,
+    item.numeric.spInt,
+    item.numeric.spDef,
+    item.numeric.spAgi,
+  ];
+}
+
+function emptySkillStatRecord(): Record<SkillStatKey, number> {
+  return {
+    str: 0,
+    dex: 0,
+    int: 0,
+    def: 0,
+    agi: 0,
+  };
+}
+
+function skillVecToRecord(vec: number[] | null | undefined): Record<SkillStatKey, number> {
+  const result = emptySkillStatRecord();
+  if (!vec) return result;
+  for (let i = 0; i < SKILL_STATS.length; i++) {
+    result[SKILL_STATS[i]] = vec[i] ?? 0;
+  }
+  return result;
+}
+
+function mergeUniqueSkillStats(...lists: SkillStatKey[][]): SkillStatKey[] {
+  const seen = new Set<SkillStatKey>();
+  const merged: SkillStatKey[] = [];
+  for (const list of lists) {
+    for (const stat of list) {
+      if (seen.has(stat)) continue;
+      seen.add(stat);
+      merged.push(stat);
+    }
+  }
+  return merged;
+}
+
 function computeSupportFocusScore(item: NormalizedItem, focusStats: SkillStatKey[]): number {
   if (focusStats.length === 0) return 0;
   let score = 0;
@@ -219,6 +285,31 @@ function computeSupportFocusScore(item: NormalizedItem, focusStats: SkillStatKey
     score -= Math.max(0, skillReq(item, stat)) * 0.7;
   }
   score -= Math.max(0, item.roughScoreFields.reqTotal) * 0.12;
+  return score;
+}
+
+function computeSkillpointPressureScore(
+  item: NormalizedItem,
+  context: SkillpointPressureContext | null | undefined,
+): number {
+  if (!context || (context.supportStats.length === 0 && context.avoidStats.length === 0)) {
+    return item.roughScoreFields.skillPointTotal - item.roughScoreFields.reqTotal * 0.15;
+  }
+
+  let score = 0;
+  for (const stat of context.supportStats) {
+    const bonus = signedStatBonus(item, stat);
+    score += Math.max(0, bonus) * 12;
+    score += Math.min(0, bonus) * 14;
+    score -= Math.max(0, skillReq(item, stat)) * 0.9;
+  }
+  for (const stat of context.avoidStats) {
+    const bonus = signedStatBonus(item, stat);
+    score -= Math.max(0, bonus) * 5.5;
+    score += Math.min(0, bonus) * 16;
+    score -= Math.max(0, skillReq(item, stat)) * 1.8;
+  }
+  score -= Math.max(0, item.roughScoreFields.reqTotal) * 0.08;
   return score;
 }
 
@@ -810,8 +901,83 @@ function collectOvercapNeeds(
   return focusStats.map((stat) => Math.max(0, maxReq[stat] - 100));
 }
 
+function collectSkillpointPressureContext(
+  baseSlots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+  constraints: AutoBuildConstraints,
+): SkillpointPressureContext {
+  const bonusTotals = emptySkillStatRecord();
+  const maxReq = emptySkillStatRecord();
+
+  for (const slot of ITEM_SLOTS) {
+    const itemId = baseSlots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+
+    bonusTotals.str += item.numeric.spStr;
+    bonusTotals.dex += item.numeric.spDex;
+    bonusTotals.int += item.numeric.spInt;
+    bonusTotals.def += item.numeric.spDef;
+    bonusTotals.agi += item.numeric.spAgi;
+
+    maxReq.str = Math.max(maxReq.str, item.numeric.reqStr);
+    maxReq.dex = Math.max(maxReq.dex, item.numeric.reqDex);
+    maxReq.int = Math.max(maxReq.int, item.numeric.reqInt);
+    maxReq.def = Math.max(maxReq.def, item.numeric.reqDef);
+    maxReq.agi = Math.max(maxReq.agi, item.numeric.reqAgi);
+  }
+
+  const partial = evaluatePartialSpFeasibility(baseSlots, catalog, constraints);
+  const assignedByStat = skillVecToRecord(partial.assignedByStat);
+
+  const supportStats = SKILL_STATS
+    .map((stat) => ({
+      stat,
+      pressure:
+        assignedByStat[stat] * 1.6 +
+        Math.max(0, maxReq[stat] - 60) * 0.7 +
+        (maxReq[stat] > 0 ? Math.max(0, -bonusTotals[stat]) * 0.45 : 0),
+    }))
+    .filter(({ stat, pressure }) => pressure >= 18 || assignedByStat[stat] >= 16 || maxReq[stat] >= 70)
+    .sort((a, b) => b.pressure - a.pressure)
+    .slice(0, 3)
+    .map(({ stat }) => stat);
+
+  const avoidStats = SKILL_STATS.filter((stat) =>
+    bonusTotals[stat] <= -15 &&
+    assignedByStat[stat] <= 8 &&
+    maxReq[stat] <= 30 &&
+    !supportStats.includes(stat),
+  );
+
+  return {
+    supportStats,
+    avoidStats,
+    isTight: !partial.feasible || partial.assignedTotal >= 100 || supportStats.length >= 2 || avoidStats.length > 0,
+  };
+}
+
 function focusBonusVectorForItem(item: NormalizedItem, focusStats: SkillStatKey[]): number[] {
   return focusStats.map((stat) => positiveStatBonus(item, stat));
+}
+
+function skillBonusTotalsFromSlots(
+  slots: WorkbenchSnapshot['slots'],
+  catalog: CatalogSnapshot,
+): number[] {
+  const totals = SKILL_STATS.map(() => 0);
+  for (const slot of ITEM_SLOTS) {
+    const itemId = slots[slot];
+    if (itemId == null) continue;
+    const item = catalog.itemsById.get(itemId);
+    if (!item) continue;
+    const bonus = skillBonusVectorForItem(item);
+    for (let i = 0; i < totals.length; i++) {
+      totals[i] += bonus[i] ?? 0;
+    }
+  }
+  return totals;
 }
 
 function addNumberVectors(a: number[], b: number[]): number[] {
@@ -834,6 +1000,34 @@ function supportDeficit(current: number[], need: number[]): number {
     deficit += Math.max(0, need[i] - (current[i] ?? 0));
   }
   return deficit;
+}
+
+function computeNegativeSkillBurdenIncrement(
+  currentBonuses: number[] | undefined,
+  nextBonuses: number[],
+  item: NormalizedItem | null,
+): number {
+  if (!item) return 0;
+  const current = currentBonuses ?? SKILL_STATS.map(() => 0);
+  let penalty = 0;
+  for (let i = 0; i < SKILL_STATS.length; i++) {
+    const stat = SKILL_STATS[i];
+    const before = current[i] ?? 0;
+    const after = nextBonuses[i] ?? 0;
+    const bonus = signedStatBonus(item, stat);
+    const req = skillReq(item, stat);
+    const burdenedBefore = before <= -15;
+    const burdenedAfter = after <= -15;
+
+    if (bonus < 0 && burdenedAfter) {
+      penalty += Math.abs(bonus) * 2.4;
+    }
+    if (burdenedBefore || burdenedAfter) {
+      penalty += Math.max(0, req) * 1.1;
+      penalty += Math.max(0, bonus) * 0.85;
+    }
+  }
+  return penalty;
 }
 
 function customRangeDeficit(
@@ -1096,6 +1290,7 @@ function buildCustomSuffixBounds(params: {
 function computeAdaptivePoolMultiplier(
   constraints: AutoBuildConstraints,
   focusStats: SkillStatKey[],
+  skillpointPressure?: SkillpointPressureContext | null,
 ): number {
   let multiplier = 1.0;
 
@@ -1109,6 +1304,8 @@ function computeAdaptivePoolMultiplier(
 
   if (constraints.requiredMajorIds.length > 0) multiplier += 0.3;
 
+  if (skillpointPressure?.isTight) multiplier += 0.35;
+
   return Math.min(2.0, multiplier);
 }
 
@@ -1119,6 +1316,7 @@ function buildCandidatePoolForSlot(
   attackSpeedCtx?: AttackSpeedReachabilityContext | null,
   allowedPinnedIdsForSlot?: Set<number> | null,
   focusStats: SkillStatKey[] = [],
+  skillpointPressure?: SkillpointPressureContext | null,
 ): Array<{ id: number; rough: number }> {
   const all: CandidatePoolEntry[] = [];
   const customRangeSpecs = getCustomRangeSpecs(constraints);
@@ -1141,6 +1339,7 @@ function buildCandidatePoolForSlot(
       spDef: item.numeric.spDef,
       spAgi: item.numeric.spAgi,
       supportFocus: computeSupportFocusScore(item, focusStats),
+      pressureSupport: computeSkillpointPressureScore(item, skillpointPressure),
     });
   }
 
@@ -1154,6 +1353,9 @@ function buildCandidatePoolForSlot(
     return a.id - b.id;
   });
   const spSupportSorted = [...all].sort((a, b) => {
+    if ((skillpointPressure?.supportStats.length ?? 0) > 0 || (skillpointPressure?.avoidStats.length ?? 0) > 0) {
+      if (a.pressureSupport !== b.pressureSupport) return b.pressureSupport - a.pressureSupport;
+    }
     if (a.skillPointTotal !== b.skillPointTotal) return b.skillPointTotal - a.skillPointTotal;
     if (a.reqTotal !== b.reqTotal) return a.reqTotal - b.reqTotal;
     return a.id - b.id;
@@ -1227,17 +1429,29 @@ function buildCandidatePoolForSlot(
       }),
     );
 
-  const adaptiveMultiplier = computeAdaptivePoolMultiplier(constraints, focusStats);
+  const isAccessorySupportSlot = slot === 'ring1' || slot === 'ring2' || slot === 'bracelet' || slot === 'necklace';
+  const adaptiveMultiplier = computeAdaptivePoolMultiplier(constraints, focusStats, skillpointPressure);
   const target = Math.max(10, Math.ceil(constraints.topKPerSlot * adaptiveMultiplier));
   const diversityBudget = Math.min(140, Math.max(40, Math.floor(target * 0.8)));
+  const accessorySupportBoost = skillpointPressure?.isTight && isAccessorySupportSlot ? 28 : 0;
   const desiredPoolSize = Math.min(
     all.length,
     target +
       diversityBudget +
+      accessorySupportBoost +
       (focusStats.length > 0 ? Math.min(60, focusStats.length * 12) : 0) +
+      ((skillpointPressure?.supportStats.length ?? 0) > 0 ? 18 : 0) +
       Math.min(80, customRangeSpecs.length * 14),
   );
   const picks = new Map<number, { id: number; rough: number }>();
+  const seedSupport =
+    skillpointPressure?.isTight && isAccessorySupportSlot && spSupportSorted.length > 0
+      ? Math.min(10, Math.max(2, Math.floor(target * 0.28)), spSupportSorted.length)
+      : 0;
+  for (let i = 0; i < seedSupport; i++) {
+    const item = spSupportSorted[i];
+    picks.set(item.id, { id: item.id, rough: item.rough });
+  }
   const seedAttackSpeed =
     attackSpeedCtx?.preferredDirection && attackSpeedSupportSorted.length > 0
       ? Math.min(8, Math.max(1, Math.floor(target * 0.25)), attackSpeedSupportSorted.length)
@@ -1264,7 +1478,14 @@ function buildCandidatePoolForSlot(
       : []),
     { list: roughSorted, remaining: Math.max(0, target - seedRough), cursor: 0 },
     { list: lowReqSorted, remaining: Math.floor(diversityBudget * 0.28), cursor: 0 },
-    { list: spSupportSorted, remaining: Math.floor(diversityBudget * 0.24), cursor: 0 },
+    {
+      list: spSupportSorted,
+      remaining: Math.max(
+        isAccessorySupportSlot && skillpointPressure?.isTight ? 28 : 0,
+        Math.floor(diversityBudget * 0.24),
+      ),
+      cursor: 0,
+    },
     { list: utilitySorted, remaining: Math.floor(diversityBudget * 0.18), cursor: 0 },
   ];
   if (attackSpeedSupportSorted.length > 0 && !attackSpeedCtx?.preferredDirection) {
@@ -1284,7 +1505,7 @@ function buildCandidatePoolForSlot(
   for (const list of statSupportSorted) {
     sources.push({
       list,
-      remaining: 10,
+      remaining: skillpointPressure?.isTight && isAccessorySupportSlot ? 14 : 10,
       cursor: 0,
     });
   }
@@ -1786,6 +2007,7 @@ function runFeasibilityBiasedBeamSearch(params: {
   const customKeys = customSpecs.map((s) => s.key);
   const customBounds = buildCustomSuffixBounds({ slotOrder, candidatePools, catalog, keys: customKeys });
   const baseCustomTotals = customTotalsFromSlots(baseSlots, catalog, customKeys);
+  const baseSkillBonuses = skillBonusTotalsFromSlots(baseSlots, catalog);
 
   let beam: BeamNode[] = [{
     slots: cloneSlots(baseSlots),
@@ -1795,6 +2017,8 @@ function runFeasibilityBiasedBeamSearch(params: {
     feasibilityAssigned: 0,
     focusSupport: focusStats.map(() => 0),
     atkTierAssigned: 0,
+    skillBonuses: baseSkillBonuses,
+    burdenPenalty: 0,
     customTotals: baseCustomTotals,
   }];
 
@@ -1836,6 +2060,10 @@ function runFeasibilityBiasedBeamSearch(params: {
         const nextFocusSupport = addNumberVectors(
           node.focusSupport ?? focusStats.map(() => 0),
           item ? focusBonusVectorForItem(item, focusStats) : focusStats.map(() => 0),
+        );
+        const nextSkillBonuses = addNumberVectors(
+          node.skillBonuses ?? SKILL_STATS.map(() => 0),
+          item ? skillBonusVectorForItem(item) : SKILL_STATS.map(() => 0),
         );
         const nextCustomTotals =
           customKeys.length > 0
@@ -1896,6 +2124,8 @@ function runFeasibilityBiasedBeamSearch(params: {
           feasibilityAssigned: partialFeasibility.feasible ? partialFeasibility.assignedTotal : Infinity,
           focusSupport: nextFocusSupport,
           atkTierAssigned: nextAtkTierAssigned,
+          skillBonuses: nextSkillBonuses,
+          burdenPenalty: (node.burdenPenalty ?? 0) + computeNegativeSkillBurdenIncrement(node.skillBonuses, nextSkillBonuses, item ?? null),
           customTotals: nextCustomTotals,
         });
       }
@@ -1931,6 +2161,9 @@ function runFeasibilityBiasedBeamSearch(params: {
         const bd = supportDeficit(b.focusSupport ?? [], overcapNeed);
         if (ad !== bd) return ad - bd;
       }
+      const ap = a.burdenPenalty ?? 0;
+      const bp = b.burdenPenalty ?? 0;
+      if (ap !== bp) return ap - bp;
       const aa = a.feasibilityAssigned ?? Infinity;
       const ba = b.feasibilityAssigned ?? Infinity;
       if (aa !== ba) return aa - ba;
@@ -1947,6 +2180,9 @@ function runFeasibilityBiasedBeamSearch(params: {
       const ad = customRangeDeficit(a.customTotals, customSpecs);
       const bd = customRangeDeficit(b.customTotals, customSpecs);
       if (ad !== bd) return ad - bd;
+      const ap = a.burdenPenalty ?? 0;
+      const bp = b.burdenPenalty ?? 0;
+      if (ap !== bp) return ap - bp;
       return b.optimisticBound - a.optimisticBound;
     });
     beam = mergeBeamLanes(primarySorted, hardSorted, Math.max(40, constraints.beamWidth));
@@ -2255,6 +2491,8 @@ export function runAutoBuildBeamSearch(params: {
   }
   baseSlots = mustIncludeAssignment.slots;
   const supportFocusStats = collectRequirementFocusStats(baseSlots, catalog);
+  const skillpointPressure = collectSkillpointPressureContext(baseSlots, catalog, constraints);
+  const poolSupportStats = mergeUniqueSkillStats(supportFocusStats, skillpointPressure.supportStats);
   const attackSpeedCtx = buildAttackSpeedReachabilityContext(baseSlots, catalog, constraints);
 
   const unlockedSlots = ITEM_SLOTS.filter((slot) => baseSlots[slot] == null);
@@ -2270,6 +2508,7 @@ export function runAutoBuildBeamSearch(params: {
         attackSpeedCtx,
         pinnedAllowlistBySlot?.[slot] ?? null,
         supportFocusStats,
+        skillpointPressure,
       ),
     );
   }
@@ -2298,10 +2537,16 @@ export function runAutoBuildBeamSearch(params: {
       }, 0);
       if (aPotential !== bPotential) return bPotential - aPotential;
     }
-    if (supportFocusStats.length > 0) {
-      const aSupport = computeSlotFocusSupportPotential(a, candidatePools, catalog, supportFocusStats);
-      const bSupport = computeSlotFocusSupportPotential(b, candidatePools, catalog, supportFocusStats);
+    if (poolSupportStats.length > 0) {
+      const aSupport = computeSlotFocusSupportPotential(a, candidatePools, catalog, poolSupportStats);
+      const bSupport = computeSlotFocusSupportPotential(b, candidatePools, catalog, poolSupportStats);
       if (aSupport !== bSupport) return bSupport - aSupport;
+    }
+    if (skillpointPressure.isTight) {
+      const supportSlots: ItemSlot[] = ['ring1', 'ring2', 'bracelet', 'necklace'];
+      const aIsSupport = supportSlots.includes(a);
+      const bIsSupport = supportSlots.includes(b);
+      if (aIsSupport !== bIsSupport) return aIsSupport ? -1 : 1;
     }
     if (hasCustomMinSpecs) {
       const supportSlots: ItemSlot[] = ['ring1', 'ring2', 'bracelet', 'necklace'];
@@ -2461,6 +2706,8 @@ export function runAutoBuildBeamSearch(params: {
     roughScore: 0,
     optimisticBound: suffixMax[0],
     atkTierAssigned: 0,
+    skillBonuses: skillBonusTotalsFromSlots(baseSlots, catalog),
+    burdenPenalty: 0,
     customTotals: customTotalsFromSlots(baseSlots, catalog, customKeys2),
     satisfiedMajorIds: initialSatisfiedMajorIds.size > 0 ? initialSatisfiedMajorIds : undefined,
   }];
@@ -2507,6 +2754,10 @@ export function runAutoBuildBeamSearch(params: {
         const nextRoughScore = node.roughScore + entry.rough;
         const item = catalog.itemsById.get(entry.id);
         const nextAtkTierAssigned = (node.atkTierAssigned ?? 0) + (item ? normalizedAtkTier(item) : 0);
+        const nextSkillBonuses = addNumberVectors(
+          node.skillBonuses ?? SKILL_STATS.map(() => 0),
+          item ? skillBonusVectorForItem(item) : SKILL_STATS.map(() => 0),
+        );
         const nextCustomTotals =
           customKeys2.length > 0
             ? addNumberVectors(
@@ -2565,6 +2816,8 @@ export function runAutoBuildBeamSearch(params: {
           roughScore: nextRoughScore,
           optimisticBound: nextRoughScore + suffixMax[orderIndex + 1] - customPenalty,
           atkTierAssigned: nextAtkTierAssigned,
+          skillBonuses: nextSkillBonuses,
+          burdenPenalty: (node.burdenPenalty ?? 0) + computeNegativeSkillBurdenIncrement(node.skillBonuses, nextSkillBonuses, item ?? null),
           customTotals: nextCustomTotals,
           satisfiedMajorIds: nextSatisfiedMajorIds,
         });
@@ -2596,6 +2849,9 @@ export function runAutoBuildBeamSearch(params: {
         const bb = attackSpeedBiasValue(attackSpeedCtx, b.atkTierAssigned, remainingMinAtkTier, remainingMaxAtkTier, spdAmp2);
         if (ab !== bb) return bb - ab;
       }
+      const ap = a.burdenPenalty ?? 0;
+      const bp = b.burdenPenalty ?? 0;
+      if (ap !== bp) return ap - bp;
       if (a.optimisticBound !== b.optimisticBound) return b.optimisticBound - a.optimisticBound;
       return b.roughScore - a.roughScore;
     });
@@ -2608,6 +2864,9 @@ export function runAutoBuildBeamSearch(params: {
       const ad = customRangeDeficit(a.customTotals, customSpecs2);
       const bd = customRangeDeficit(b.customTotals, customSpecs2);
       if (ad !== bd) return ad - bd;
+      const ap = a.burdenPenalty ?? 0;
+      const bp = b.burdenPenalty ?? 0;
+      if (ap !== bp) return ap - bp;
       return b.optimisticBound - a.optimisticBound;
     });
     beam = mergeBeamLanes(primarySorted, hardSorted, Math.max(20, constraints.beamWidth));
