@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useShallow } from 'zustand/react/shallow';
-import { CirclePlay, Hammer, Link2, TreePine } from 'lucide-react';
+import { CirclePlay, FlaskConical, Hammer, Link2, TreePine } from 'lucide-react';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode, type ThemeMode } from '@/app/theme-mode';
 import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
@@ -623,12 +623,23 @@ export function App() {
             </a>
             <button
               type="button"
-              className="flex items-center gap-2 rounded-lg border-2 border-[var(--wb-accent)] bg-[var(--wb-accent)] px-4 py-2 text-sm font-bold text-[var(--wb-button-primary-text)] shadow-sm transition-all hover:bg-[var(--wb-accent-hover)] hover:border-[var(--wb-accent-hover)] hover:shadow-md active:scale-95"
+              className="wb-solver-cta flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-all active:scale-95"
               onClick={openAutoBuilder}
               title="Open Build Solver"
+              data-tone="build"
             >
-              <Hammer size={17} />
+              <Hammer size={18} />
               <span className="hidden sm:inline">Build Solver</span>
+            </button>
+            <button
+              type="button"
+              className="wb-solver-cta flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-all active:scale-95"
+              onClick={openRecipeSolver}
+              title="Open Recipe Solver"
+              data-tone="recipe"
+            >
+              <FlaskConical size={18} />
+              <span className="hidden sm:inline">Recipe Solver</span>
             </button>
           </div>
 
@@ -685,9 +696,6 @@ export function App() {
             <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={openAbilityTree}>
               <TreePine size={12} className="mr-1" />
               ATree
-            </Button>
-            <Button variant="primary" className="px-3 py-1.5 text-xs font-bold shadow-sm hover:shadow-md" onClick={openRecipeSolver}>
-              Recipe Solver
             </Button>
             <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
           </div>

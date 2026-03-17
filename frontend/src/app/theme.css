@@ -786,6 +786,38 @@ a {
   opacity: 0.6;
 }
 
+/* ─── Solver button glow ─── */
+@keyframes solver-glow {
+  0%, 100% { box-shadow: 0 0 10px 2px var(--_glow-color); }
+  50%      { box-shadow: 0 0 26px 7px var(--_glow-color); }
+}
+
+.wb-solver-cta {
+  --_cta-color: var(--wb-accent);
+  --_cta-border: color-mix(in srgb, var(--_cta-color) 70%, transparent);
+  --_cta-bg-hover: color-mix(in srgb, var(--_cta-color) 12%, transparent);
+  --_glow-color: color-mix(in srgb, var(--_cta-color) 58%, transparent);
+  background: transparent;
+  color: var(--wb-text);
+  border: 3px solid var(--_cta-border);
+  box-shadow: 0 0 10px 2px var(--_glow-color);
+  animation: solver-glow 2.8s ease-in-out infinite;
+}
+
+.wb-solver-cta:hover {
+  animation: none;
+  background: var(--_cta-bg-hover);
+  box-shadow: 0 0 28px 8px var(--_glow-color);
+}
+
+.wb-solver-cta[data-tone="build"] {
+  --_cta-color: var(--wb-success);
+}
+
+.wb-solver-cta[data-tone="recipe"] {
+  --_cta-color: var(--wb-accent-2);
+}
+
 /* ─── Reduced motion ─── */
 @media (prefers-reduced-motion: reduce) {
   * {

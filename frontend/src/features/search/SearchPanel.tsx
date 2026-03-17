@@ -150,7 +150,7 @@ export function SearchResultList(props: {
   const endItem = Math.min((clampedPage + 1) * PAGE_SIZE, totalItems);
 
   return (
-    <div className="min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--wb-text-tertiary)]">
         <div className="flex items-center gap-2">
           <span>{statusText}</span>
@@ -173,7 +173,7 @@ export function SearchResultList(props: {
         ref={parentRef}
         className={cn(
           'wb-scrollbar overflow-auto rounded-md border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
-          props.embedded ? 'min-h-[140px] flex-1' : 'h-[calc(100vh-22rem)]',
+          props.embedded ? 'min-h-0 flex-1' : 'h-[calc(100vh-22rem)]',
         )}
       >
         {!hasSearched ? (
