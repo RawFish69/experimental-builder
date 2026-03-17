@@ -757,7 +757,7 @@ export function App() {
 
           {/* Right Stats Panel */}
           {!statsPanelCollapsed && (
-            <aside className="flex w-[400px] shrink-0 flex-col overflow-auto border-l border-[var(--wb-surface-border)] bg-[var(--wb-surface)] wb-scrollbar xl:w-[440px]">
+            <aside className="flex w-[400px] shrink-0 flex-col overflow-hidden border-l border-[var(--wb-surface-border)] bg-[var(--wb-surface)] xl:w-[440px]">
               <BuildSummaryPanel
                 catalog={catalog}
                 snapshot={snapshot}

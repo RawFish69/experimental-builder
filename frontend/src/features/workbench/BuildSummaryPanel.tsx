@@ -39,7 +39,7 @@ export function BuildSummaryPanel(props: {
   const meleePreview = props.spellPreview?.melee ?? null;
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-[var(--wb-border-muted)] px-3 py-2">
         <span className="text-sm font-semibold">Stats</span>
