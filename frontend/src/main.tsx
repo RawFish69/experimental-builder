@@ -19,10 +19,10 @@ class AppErrorBoundary extends Component<{ children: React.ReactNode }, { hasErr
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex min-h-screen items-center justify-center p-6" style={{ background: 'var(--wb-bg-bottom)', color: 'var(--wb-text)' }}>
-          <div className="max-w-xl rounded-2xl p-6" style={{ background: 'var(--wb-panel)', border: '1px solid var(--wb-border)' }}>
-            <div className="text-xl font-semibold">Something went wrong</div>
-            <div className="mt-2 text-sm" style={{ color: 'var(--wb-muted)' }}>
+        <div className="flex min-h-screen items-center justify-center p-6" style={{ background: 'var(--wb-canvas)', color: 'var(--wb-text)' }}>
+          <div className="max-w-md rounded-lg p-5" style={{ background: 'var(--wb-surface)', border: '1px solid var(--wb-border)' }}>
+            <div className="text-base font-semibold">Something went wrong</div>
+            <div className="mt-1 text-[13px]" style={{ color: 'var(--wb-text-secondary)' }}>
               {this.state.error?.message ?? 'Failed to load the app.'} Try refreshing the page.
             </div>
           </div>

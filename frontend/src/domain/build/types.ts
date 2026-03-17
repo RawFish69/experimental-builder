@@ -73,6 +73,8 @@ export interface WorkbenchSnapshot {
   craftedSlots: Partial<Record<ItemSlot, CraftedSlotInfo>>;
   binsByCategory: Record<ItemCategoryKey, number[]>;
   locks: Record<ItemSlot, boolean>;
+  /** Powder IDs assigned per slot (array index = powder slot index, value = powder ID from POWDERS). */
+  powdersBySlot: Partial<Record<ItemSlot, number[]>>;
   level: number;
   characterClass: CharacterClass | null;
   selectedSlot: ItemSlot | null;

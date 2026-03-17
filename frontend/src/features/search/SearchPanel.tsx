@@ -7,8 +7,8 @@ import { categoryLabel, ITEM_CATEGORY_KEYS, slotToCategory } from '@/domain/item
 import { formatNumericIdLabel } from '@/domain/items/numeric-id-labels';
 import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter-schema';
 import { DEFAULT_SEARCH_FILTER_STATE, mergeSearchState } from '@/domain/search/filter-schema';
-import { Button, ChipButton, cn, FieldLabel, Panel } from '@/components/ui';
-import { ItemCard, ItemDetailStats } from '@/features/workbench/ItemCard';
+import { Button, ChipButton, cn, FieldLabel } from '@/components/ui';
+import { ItemRow, ItemCard, ItemDetailStats } from '@/components/ItemDisplay';
 
 const PRESET_STORAGE_KEY = 'workbench-search-presets:v2';
 
@@ -36,7 +36,7 @@ function toggleString(arr: string[], value: string): string[] {
   return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 }
 
-const ROW_ESTIMATE_HEIGHT_SIDEBAR = 220;
+const ROW_ESTIMATE_HEIGHT_SIDEBAR = 44;
 const ROW_ESTIMATE_HEIGHT_BELOW = 200;
 const PAGE_SIZE = 50;
 
@@ -44,6 +44,7 @@ function SearchResultItem(props: {
   catalog: CatalogSnapshot;
   itemId: number;
   selectedSlot: ItemSlot | null;
+  isSidebar: boolean;
   onPin(itemId: number): void;
   onEquip(itemId: number): void;
   onHover(itemId: number | null, slot: ItemSlot | null): void;
@@ -54,16 +55,32 @@ function SearchResultItem(props: {
   const selectedSlotMatches =
     props.selectedSlot != null && slotToCategory(props.selectedSlot) === item.category;
 
+  if (props.isSidebar) {
+    return (
+      <div
+        onMouseEnter={(e) => props.onHoverForStats(props.itemId, e.currentTarget.getBoundingClientRect())}
+        onMouseLeave={() => props.onHoverForStats(null, null)}
+      >
+        <ItemRow
+          item={item}
+          dragData={{ kind: 'search', itemId: item.id }}
+          onPin={() => props.onPin(item.id)}
+          onEquip={() => props.onEquip(item.id)}
+          onHover={(hovering) => props.onHover(hovering ? item.id : null, hovering ? props.selectedSlot : null)}
+          badge={selectedSlotMatches ? `Fits ${props.selectedSlot}` : undefined}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
-      className="relative"
       onMouseEnter={(e) => props.onHoverForStats(props.itemId, e.currentTarget.getBoundingClientRect())}
       onMouseLeave={() => props.onHoverForStats(null, null)}
     >
       <ItemCard
         item={item}
         compact
-        dense
         showDetails={false}
         dragData={{ kind: 'search', itemId: item.id }}
         onPin={() => props.onPin(item.id)}
@@ -84,7 +101,6 @@ export function SearchResultList(props: {
   onPin(itemId: number): void;
   onEquip(itemId: number): void;
   onHover(itemId: number | null, slot: ItemSlot | null): void;
-  /** When true, results are embedded in another panel (e.g. workbench) and use flexible height */
   embedded?: boolean;
 }) {
   const parentRef = useRef<HTMLDivElement | null>(null);
@@ -99,15 +115,10 @@ export function SearchResultList(props: {
   const clampedPage = Math.min(page, Math.max(0, totalPages - 1));
   const pageRows = deferredRows.slice(clampedPage * PAGE_SIZE, (clampedPage + 1) * PAGE_SIZE);
 
-  useEffect(() => {
-    setPage(0);
-  }, [props.result]);
+  useEffect(() => { setPage(0); }, [props.result]);
 
   const setHovered = (val: { itemId: number; rect: DOMRect } | null) => {
-    if (hideTimerRef.current) {
-      window.clearTimeout(hideTimerRef.current);
-      hideTimerRef.current = null;
-    }
+    if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
     setHoveredForStats(val);
   };
 
@@ -123,9 +134,8 @@ export function SearchResultList(props: {
     count: rowCount,
     getScrollElement: () => parentRef.current,
     estimateSize: () => rowHeightEstimate,
-    // Search rows contain variable-height cards; measure actual height to avoid overlap.
     measureElement: (el) => el.getBoundingClientRect().height,
-    overscan: 4,
+    overscan: 6,
   });
 
   const hoveredItem = hoveredForStats ? props.catalog.itemsById.get(hoveredForStats.itemId) : null;
@@ -135,125 +145,102 @@ export function SearchResultList(props: {
     ? 'Searching...'
     : props.result
       ? `${props.result.total.toLocaleString()} results`
-      : 'Search or filter to see items';
+      : 'Search to see items';
   const startItem = totalItems === 0 ? 0 : clampedPage * PAGE_SIZE + 1;
   const endItem = Math.min((clampedPage + 1) * PAGE_SIZE, totalItems);
 
   return (
     <div className="min-h-0 flex-1">
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs text-[var(--wb-muted)]">
-        <div className="flex items-center gap-3">
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-1 px-1 text-[11px] text-[var(--wb-text-tertiary)]">
+        <div className="flex items-center gap-2">
           <span>{statusText}</span>
-          {hasSearched && totalItems > 0 ? (
-            <span className="shrink-0">
-              {totalPages > 1 ? (
-                <>
-                  <button
-                    type="button"
-                    className="wb-inline-button mr-1"
-                    onClick={() => setPage((p) => Math.max(0, p - 1))}
-                    disabled={clampedPage <= 0}
-                    title="Previous page"
-                  >
-                    ←
-                  </button>
-                  <span>{(startItem).toLocaleString()}–{endItem.toLocaleString()}</span>
-                  <button
-                    type="button"
-                    className="wb-inline-button ml-1"
-                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                    disabled={clampedPage >= totalPages - 1}
-                    title="Next page"
-                  >
-                    →
-                  </button>
-                </>
-              ) : null}
+          {hasSearched && totalItems > 0 && totalPages > 1 && (
+            <span className="flex items-center gap-1">
+              <button type="button" className="wb-inline-button" onClick={() => setPage((p) => Math.max(0, p - 1))} disabled={clampedPage <= 0}>←</button>
+              <span>{startItem}–{endItem}</span>
+              <button type="button" className="wb-inline-button" onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))} disabled={clampedPage >= totalPages - 1}>→</button>
             </span>
-          ) : null}
+          )}
         </div>
-        {hasSearched ? (
-          <span>
+        {hasSearched && (
+          <span className="text-[10px]">
             {(props.state.sortKeys ?? ['relevance']).map((k) => formatNumericIdLabel(k)).join(' → ')}
             {props.state.sortDescending ? ' ↓' : ' ↑'}
           </span>
-        ) : null}
+        )}
       </div>
       <div
         ref={parentRef}
         className={cn(
-          'wb-scrollbar wb-surface overflow-auto rounded-xl',
-          props.embedded ? 'min-h-[160px] flex-1' : 'h-[calc(100vh-26rem)]',
+          'wb-scrollbar overflow-auto rounded-md border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
+          props.embedded ? 'min-h-[140px] flex-1' : 'h-[calc(100vh-22rem)]',
         )}
       >
         {!hasSearched ? (
-          <div className="flex min-h-[120px] flex-col items-center justify-center gap-1 px-4 py-6 text-center text-sm text-[var(--wb-muted)]">
-            <span>Enter a search term, select categories, or apply filters above to see items.</span>
+          <div className="flex min-h-[80px] items-center justify-center p-4 text-center text-[12px] text-[var(--wb-text-tertiary)]">
+            Enter search text or apply filters to see items.
           </div>
         ) : pageRows.length === 0 ? (
-          <div className="flex min-h-[120px] flex-col items-center justify-center gap-1 px-4 py-6 text-center text-sm text-[var(--wb-muted)]">
-            <span>No items match your filters.</span>
+          <div className="flex min-h-[80px] items-center justify-center p-4 text-center text-[12px] text-[var(--wb-text-tertiary)]">
+            No items match.
           </div>
         ) : (
-        <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
-          {virtualizer.getVirtualItems().map((virtualRow) => {
-            const baseIdx = virtualRow.index * itemsPerRow;
-            const rowItems = pageRows.slice(baseIdx, baseIdx + itemsPerRow);
-            return (
-              <div
-                key={virtualRow.key}
-                data-index={virtualRow.index}
-                ref={virtualizer.measureElement}
-                style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  width: '100%',
-                  transform: `translateY(${virtualRow.start}px)`,
-                  padding: '6px 8px',
-                }}
-                className={isSidebar ? 'grid grid-cols-1' : 'grid grid-cols-2 gap-2 xl:grid-cols-3'}
-              >
-                {rowItems.map((r) => (
-                  <SearchResultItem
-                    key={r.id}
-                    catalog={props.catalog}
-                    itemId={r.id}
-                    selectedSlot={props.selectedSlot}
-                    onPin={props.onPin}
-                    onEquip={props.onEquip}
-                    onHover={props.onHover}
-                    onHoverForStats={(id, rect) => {
-                    if (id != null && rect) setHovered({ itemId: id, rect });
-                    else scheduleHide();
+          <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const baseIdx = virtualRow.index * itemsPerRow;
+              const rowItems = pageRows.slice(baseIdx, baseIdx + itemsPerRow);
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                    padding: isSidebar ? '1px 4px' : '4px 6px',
                   }}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
+                  className={isSidebar ? '' : 'grid grid-cols-2 gap-2 xl:grid-cols-3'}
+                >
+                  {rowItems.map((r) => (
+                    <SearchResultItem
+                      key={r.id}
+                      catalog={props.catalog}
+                      itemId={r.id}
+                      selectedSlot={props.selectedSlot}
+                      isSidebar={isSidebar}
+                      onPin={props.onPin}
+                      onEquip={props.onEquip}
+                      onHover={props.onHover}
+                      onHoverForStats={(id, rect) => {
+                        if (id != null && rect) setHovered({ itemId: id, rect });
+                        else scheduleHide();
+                      }}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {hoveredItem && hoveredForStats
         ? createPortal(
             <div
-              className="fixed z-[100] w-72 max-h-[80vh] overflow-auto rounded-xl border border-[var(--wb-border)] bg-[var(--wb-panel)] p-2.5 shadow-xl"
+              className="fixed z-[100] w-64 max-h-[80vh] overflow-auto rounded-lg border border-[var(--wb-border)] bg-[var(--wb-surface)] p-2.5 shadow-lg"
               style={{
-                left: Math.min(hoveredForStats.rect.right + 8, window.innerWidth - 296),
-                top: hoveredForStats.rect.top,
+                left: Math.min(hoveredForStats.rect.right + 8, window.innerWidth - 270),
+                top: Math.max(4, Math.min(hoveredForStats.rect.top, window.innerHeight - 400)),
               }}
               onMouseEnter={() => {
-                if (hideTimerRef.current) {
-                  window.clearTimeout(hideTimerRef.current);
-                  hideTimerRef.current = null;
-                }
+                if (hideTimerRef.current) { window.clearTimeout(hideTimerRef.current); hideTimerRef.current = null; }
               }}
               onMouseLeave={() => setHoveredForStats(null)}
             >
-              <div className="mb-1.5 break-words text-xs font-semibold text-[var(--wb-text)]">{hoveredItem.displayName}</div>
-              <ItemDetailStats item={hoveredItem} dense />
+              <ItemDetailStats item={hoveredItem} />
             </div>,
             document.body,
           )
@@ -299,57 +286,52 @@ export function SearchPanel(props: {
   const updateState = (patch: Partial<SearchFilterState>) => props.setState(mergeSearchState(props.state, patch));
 
   return (
-    <Panel
-      className="flex min-h-0 flex-col"
-      title={
-        <div className="flex items-center gap-2">
-          <Search size={15} />
-          Advanced Item Search
-        </div>
-      }
-      headerRight={null}
-    >
-      <div className="flex min-h-0 flex-col gap-3 p-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-          <div className="min-w-0 flex-1">
-            <FieldLabel>Search Text</FieldLabel>
-            <input
-              className="wb-input"
-              placeholder="Name, lore, major ID..."
-              value={props.state.text}
-              onChange={(e) => updateState({ text: e.target.value })}
-            />
-          </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {/* Search header */}
+      <div className="flex items-center gap-2 border-b border-[var(--wb-border-muted)] px-3 py-2">
+        <Search size={13} className="shrink-0 text-[var(--wb-text-tertiary)]" />
+        <span className="text-[13px] font-semibold">Item Search</span>
+      </div>
+
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto p-2 wb-scrollbar">
+        {/* Search input + button */}
+        <div className="flex gap-1.5">
+          <input
+            className="wb-input flex-1"
+            placeholder="Name, lore, major ID..."
+            value={props.state.text}
+            onChange={(e) => updateState({ text: e.target.value })}
+          />
           <Button
             variant="primary"
-            className="shrink-0"
+            className="shrink-0 px-2 py-1 text-[11px]"
             onClick={props.onSearch}
             disabled={props.loading}
-            title="Run search with current filters"
           >
-            {props.loading ? 'Searching…' : 'Show items'}
+            {props.loading ? '...' : 'Search'}
           </Button>
         </div>
 
-        <div className="flex items-center gap-2">
-          <FieldLabel className="mb-0 shrink-0">Results</FieldLabel>
+        {/* Results location toggle */}
+        <div className="flex items-center gap-1.5">
+          <FieldLabel className="mb-0 shrink-0">Show</FieldLabel>
           <ChipButton
             active={props.state.resultsBelowBuild}
             onClick={() => updateState({ resultsBelowBuild: !props.state.resultsBelowBuild })}
-            title="Toggle: show below Workbench or in sidebar"
           >
             {props.state.resultsBelowBuild ? 'Below build' : 'In sidebar'}
           </ChipButton>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Sort + View */}
+        <div className="grid grid-cols-2 gap-1.5">
           <div>
-            <FieldLabel>Sort by</FieldLabel>
-            <div className="flex flex-col gap-1">
+            <FieldLabel>Sort</FieldLabel>
+            <div className="flex flex-col gap-0.5">
               {(props.state.sortKeys ?? ['relevance']).map((key, idx) => (
-                <div key={idx} className="flex items-center gap-1">
+                <div key={idx} className="flex items-center gap-0.5">
                   <select
-                    className="wb-select flex-1"
+                    className="wb-select flex-1 text-[11px]"
                     value={key}
                     onChange={(e) => {
                       const next = [...(props.state.sortKeys ?? ['relevance'])];
@@ -358,28 +340,23 @@ export function SearchPanel(props: {
                     }}
                   >
                     {sortIdOptions.map((k) => (
-                      <option key={k} value={k}>
-                        {formatNumericIdLabel(k)}
-                      </option>
+                      <option key={k} value={k}>{formatNumericIdLabel(k)}</option>
                     ))}
                   </select>
-                  <Button
-                    variant="ghost"
-                    className="shrink-0 px-1"
+                  <button
+                    type="button"
+                    className="wb-inline-button px-1 text-[11px]"
                     onClick={() => {
                       const next = (props.state.sortKeys ?? ['relevance']).filter((_, i) => i !== idx);
                       if (next.length === 0) next.push('relevance');
                       updateState({ sortKeys: next });
                     }}
-                    title="Remove sort"
-                  >
-                    ×
-                  </Button>
+                  >×</button>
                 </div>
               ))}
-              <Button
-                variant="ghost"
-                className="self-start text-xs"
+              <button
+                type="button"
+                className="wb-inline-button self-start text-[10px]"
                 onClick={() => {
                   const current = props.state.sortKeys ?? ['relevance'];
                   const next = sortIdOptions.find((k) => !current.includes(k)) ?? sortIdOptions[0];
@@ -387,36 +364,28 @@ export function SearchPanel(props: {
                 }}
                 disabled={(props.state.sortKeys ?? ['relevance']).length >= 8}
               >
-                + Add sort level
-              </Button>
+                + Sort
+              </button>
             </div>
           </div>
           <div>
             <FieldLabel>View</FieldLabel>
-            <div className="flex gap-2">
-              <ChipButton active={props.state.viewMode === 'list'} onClick={() => updateState({ viewMode: 'list' })}>
-                List
-              </ChipButton>
-              <ChipButton active={props.state.viewMode === 'grid'} onClick={() => updateState({ viewMode: 'grid' })}>
-                Grid
-              </ChipButton>
-              <ChipButton
-                active={props.state.sortDescending}
-                onClick={() => updateState({ sortDescending: !props.state.sortDescending })}
-                title="Toggle descending"
-              >
-                {props.state.sortDescending ? 'Desc' : 'Asc'}
+            <div className="flex flex-wrap gap-1">
+              <ChipButton active={props.state.viewMode === 'list'} onClick={() => updateState({ viewMode: 'list' })}>List</ChipButton>
+              <ChipButton active={props.state.viewMode === 'grid'} onClick={() => updateState({ viewMode: 'grid' })}>Grid</ChipButton>
+              <ChipButton active={props.state.sortDescending} onClick={() => updateState({ sortDescending: !props.state.sortDescending })}>
+                {props.state.sortDescending ? '↓' : '↑'}
               </ChipButton>
             </div>
           </div>
         </div>
 
+        {/* Category chips */}
         <div>
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">
-            <SlidersHorizontal size={13} />
-            Category
-          </div>
-          <div className="flex flex-wrap gap-2">
+          <FieldLabel className="flex items-center gap-1">
+            <SlidersHorizontal size={10} /> Category
+          </FieldLabel>
+          <div className="flex flex-wrap gap-1">
             {ITEM_CATEGORY_KEYS.map((category) => (
               <ChipButton
                 key={category}
@@ -424,15 +393,16 @@ export function SearchPanel(props: {
                 onClick={() => updateState({ categories: toggleString(props.state.categories, category) as SearchFilterState['categories'] })}
               >
                 {categoryLabel(category)}
-                {facetCounts?.categories[category] ? ` (${facetCounts.categories[category]})` : ''}
+                {facetCounts?.categories[category] ? ` ${facetCounts.categories[category]}` : ''}
               </ChipButton>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        {/* Level + Class */}
+        <div className="grid grid-cols-2 gap-1.5">
           <div>
-            <FieldLabel>Wearable At Level</FieldLabel>
+            <FieldLabel>Wearable Lv</FieldLabel>
             <input
               className="wb-input"
               type="number"
@@ -446,7 +416,7 @@ export function SearchPanel(props: {
             />
           </div>
           <div>
-            <FieldLabel>Class Filter</FieldLabel>
+            <FieldLabel>Class</FieldLabel>
             <select
               className="wb-select"
               value={props.state.classReqs[0] ?? ''}
@@ -457,227 +427,140 @@ export function SearchPanel(props: {
             >
               <option value="">Any</option>
               {props.catalog.facetsMeta.classReqs.map((cls) => (
-                <option key={cls} value={cls}>
-                  {cls}
-                </option>
+                <option key={cls} value={cls}>{cls}</option>
               ))}
             </select>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-          <ChipButton
-            active={props.state.onlyClassCompatible}
-            onClick={() => updateState({ onlyClassCompatible: !props.state.onlyClassCompatible })}
-          >
-            Only class-compatible
+        <div className="flex flex-wrap gap-1">
+          <ChipButton active={props.state.onlyClassCompatible} onClick={() => updateState({ onlyClassCompatible: !props.state.onlyClassCompatible })}>
+            Class-compat
           </ChipButton>
-          <ChipButton
-            active={props.state.excludeRestricted}
-            onClick={() => updateState({ excludeRestricted: !props.state.excludeRestricted })}
-          >
-            Exclude restricted
+          <ChipButton active={props.state.excludeRestricted} onClick={() => updateState({ excludeRestricted: !props.state.excludeRestricted })}>
+            No restricted
           </ChipButton>
         </div>
 
+        {/* Advanced ID Filters */}
         <details className="group">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)] flex items-center gap-2">
-            <SlidersHorizontal size={13} />
-            Advanced ID Filters
+          <summary className="flex cursor-pointer items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">
+            <SlidersHorizontal size={10} /> ID Filters
           </summary>
-          <div className="mt-3 grid gap-2">
-            <div className="text-xs text-[var(--wb-muted)]">
-              Set min/max for any ID (e.g. mr, sdPct, ehpProxy). Items outside ranges are excluded.
+          <div className="mt-1.5 grid gap-1.5">
+            <div className="text-[10px] text-[var(--wb-text-quaternary)]">
+              Set min/max for any stat. Items outside ranges are excluded.
             </div>
             {Object.entries(props.state.numericRanges).map(([rangeKey, current]) => {
               const metaKey = rangeKey === 'powderSlots' ? 'slots' : rangeKey === 'level' ? 'lvl' : rangeKey === 'baseDps' ? 'averageDps' : rangeKey;
               const metaRange = props.catalog.facetsMeta.numericRanges[metaKey];
               const cur = current ?? {};
               return (
-                <div key={rangeKey} className="flex flex-wrap items-end gap-2 rounded-lg border border-[var(--wb-border-muted)] p-2">
-                  <div className="min-w-[120px] flex-1">
+                <div key={rangeKey} className="flex flex-wrap items-end gap-1 rounded border border-[var(--wb-border-muted)] p-1.5">
+                  <div className="min-w-[90px] flex-1">
                     <FieldLabel>ID</FieldLabel>
-                    <select
-                      className="wb-select w-full"
-                      value={rangeKey}
-                      onChange={(e) => {
-                        const next = { ...props.state.numericRanges };
-                        delete next[rangeKey];
-                        next[e.target.value] = cur;
-                        updateState({ numericRanges: next });
-                      }}
-                    >
-                      {filterIdOptions.map((k) => (
-                        <option key={k} value={k} disabled={k !== rangeKey && k in props.state.numericRanges}>
-                          {formatNumericIdLabel(k)}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="min-w-[70px]">
-                    <FieldLabel>Min</FieldLabel>
-                    <input
-                      className="wb-input w-full"
-                      type="number"
-                      placeholder={metaRange ? String(Math.floor(metaRange.min)) : 'min'}
-                      value={cur.min ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        updateState({
-                          numericRanges: {
-                            ...props.state.numericRanges,
-                            [rangeKey]: { ...cur, min: v === '' ? undefined : Number(v) },
-                          },
-                        });
-                      }}
-                    />
-                  </div>
-                  <div className="min-w-[70px]">
-                    <FieldLabel>Max</FieldLabel>
-                    <input
-                      className="wb-input w-full"
-                      type="number"
-                      placeholder={metaRange ? String(Math.ceil(metaRange.max)) : 'max'}
-                      value={cur.max ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        updateState({
-                          numericRanges: {
-                            ...props.state.numericRanges,
-                            [rangeKey]: { ...cur, max: v === '' ? undefined : Number(v) },
-                          },
-                        });
-                      }}
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    className="shrink-0"
-                    onClick={() => {
+                    <select className="wb-select text-[11px]" value={rangeKey} onChange={(e) => {
                       const next = { ...props.state.numericRanges };
                       delete next[rangeKey];
+                      next[e.target.value] = cur;
                       updateState({ numericRanges: next });
-                    }}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              );
-            })}
-            <Button
-              variant="ghost"
-              onClick={() => {
-                const used = new Set(Object.keys(props.state.numericRanges));
-                const first = filterIdOptions.find((k) => !used.has(k));
-                if (first) updateState({ numericRanges: { ...props.state.numericRanges, [first]: {} } });
-              }}
-              disabled={filterIdOptions.every((k) => k in props.state.numericRanges)}
-            >
-              Add ID Filter
-            </Button>
-          </div>
-        </details>
-
-        <details className="group">
-          <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)] flex items-center gap-2">
-            Exclusion (IDs to avoid)
-          </summary>
-          <div className="mt-3 grid gap-2">
-            <div className="text-xs text-[var(--wb-muted)]">
-              Exclude items that exceed max (or are below min). E.g. mr max 20 = exclude items with mana regen &gt; 20.
-            </div>
-            {Object.entries(props.state.exclusionRanges ?? {}).map(([rangeKey, current]) => {
-              const metaKey = rangeKey === 'powderSlots' ? 'slots' : rangeKey === 'level' ? 'lvl' : rangeKey === 'baseDps' ? 'averageDps' : rangeKey;
-              const metaRange = props.catalog.facetsMeta.numericRanges[metaKey];
-              const cur = current ?? {};
-              return (
-                <div key={rangeKey} className="flex flex-wrap items-end gap-2 rounded-lg border border-[var(--wb-border-muted)] border-amber-500/30 p-2">
-                  <div className="min-w-[120px] flex-1">
-                    <FieldLabel>Avoid ID</FieldLabel>
-                    <select
-                      className="wb-select w-full"
-                      value={rangeKey}
-                      onChange={(e) => {
-                        const next = { ...(props.state.exclusionRanges ?? {}) };
-                        delete next[rangeKey];
-                        next[e.target.value] = cur;
-                        updateState({ exclusionRanges: next });
-                      }}
-                    >
+                    }}>
                       {filterIdOptions.map((k) => (
-                        <option key={k} value={k} disabled={k !== rangeKey && k in (props.state.exclusionRanges ?? {})}>
-                          {formatNumericIdLabel(k)}
-                        </option>
+                        <option key={k} value={k} disabled={k !== rangeKey && k in props.state.numericRanges}>{formatNumericIdLabel(k)}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="min-w-[70px]">
-                    <FieldLabel>Max (exclude if &gt;)</FieldLabel>
-                    <input
-                      className="wb-input w-full"
-                      type="number"
-                      placeholder={metaRange ? String(Math.ceil(metaRange.max)) : 'max'}
-                      value={cur.max ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        updateState({
-                          exclusionRanges: {
-                            ...(props.state.exclusionRanges ?? {}),
-                            [rangeKey]: { ...cur, max: v === '' ? undefined : Number(v) },
-                          },
-                        });
-                      }}
-                    />
+                  <div className="w-16">
+                    <FieldLabel>Min</FieldLabel>
+                    <input className="wb-input text-[11px]" type="number" placeholder={metaRange ? String(Math.floor(metaRange.min)) : ''} value={cur.min ?? ''} onChange={(e) => {
+                      const v = e.target.value.trim();
+                      updateState({ numericRanges: { ...props.state.numericRanges, [rangeKey]: { ...cur, min: v === '' ? undefined : Number(v) } } });
+                    }} />
                   </div>
-                  <div className="min-w-[70px]">
-                    <FieldLabel>Min (exclude if &lt;)</FieldLabel>
-                    <input
-                      className="wb-input w-full"
-                      type="number"
-                      placeholder="min"
-                      value={cur.min ?? ''}
-                      onChange={(e) => {
-                        const v = e.target.value.trim();
-                        updateState({
-                          exclusionRanges: {
-                            ...(props.state.exclusionRanges ?? {}),
-                            [rangeKey]: { ...cur, min: v === '' ? undefined : Number(v) },
-                          },
-                        });
-                      }}
-                    />
+                  <div className="w-16">
+                    <FieldLabel>Max</FieldLabel>
+                    <input className="wb-input text-[11px]" type="number" placeholder={metaRange ? String(Math.ceil(metaRange.max)) : ''} value={cur.max ?? ''} onChange={(e) => {
+                      const v = e.target.value.trim();
+                      updateState({ numericRanges: { ...props.state.numericRanges, [rangeKey]: { ...cur, max: v === '' ? undefined : Number(v) } } });
+                    }} />
                   </div>
-                  <Button
-                    variant="ghost"
-                    className="shrink-0"
-                    onClick={() => {
-                      const next = { ...(props.state.exclusionRanges ?? {}) };
-                      delete next[rangeKey];
-                      updateState({ exclusionRanges: next });
-                    }}
-                  >
-                    Remove
-                  </Button>
+                  <button type="button" className="wb-inline-button text-[11px]" onClick={() => {
+                    const next = { ...props.state.numericRanges };
+                    delete next[rangeKey];
+                    updateState({ numericRanges: next });
+                  }}>×</button>
                 </div>
               );
             })}
-            <Button
-              variant="ghost"
-              onClick={() => {
-                const used = new Set(Object.keys(props.state.exclusionRanges ?? {}));
-                const first = filterIdOptions.find((k) => !used.has(k));
-                if (first) updateState({ exclusionRanges: { ...(props.state.exclusionRanges ?? {}), [first]: {} } });
-              }}
-              disabled={filterIdOptions.every((k) => k in (props.state.exclusionRanges ?? {}))}
-            >
-              Add exclusion
-            </Button>
+            <button type="button" className="wb-inline-button self-start text-[10px]" onClick={() => {
+              const used = new Set(Object.keys(props.state.numericRanges));
+              const first = filterIdOptions.find((k) => !used.has(k));
+              if (first) updateState({ numericRanges: { ...props.state.numericRanges, [first]: {} } });
+            }} disabled={filterIdOptions.every((k) => k in props.state.numericRanges)}>
+              + Add filter
+            </button>
           </div>
         </details>
 
+        {/* Exclusion Filters */}
+        <details className="group">
+          <summary className="flex cursor-pointer items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">
+            Exclusions
+          </summary>
+          <div className="mt-1.5 grid gap-1.5">
+            {Object.entries(props.state.exclusionRanges ?? {}).map(([rangeKey, current]) => {
+              const cur = current ?? {};
+              return (
+                <div key={rangeKey} className="flex flex-wrap items-end gap-1 rounded border border-[var(--wb-warn-border)] p-1.5">
+                  <div className="min-w-[90px] flex-1">
+                    <FieldLabel>Avoid</FieldLabel>
+                    <select className="wb-select text-[11px]" value={rangeKey} onChange={(e) => {
+                      const next = { ...(props.state.exclusionRanges ?? {}) };
+                      delete next[rangeKey];
+                      next[e.target.value] = cur;
+                      updateState({ exclusionRanges: next });
+                    }}>
+                      {filterIdOptions.map((k) => (
+                        <option key={k} value={k} disabled={k !== rangeKey && k in (props.state.exclusionRanges ?? {})}>{formatNumericIdLabel(k)}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-16">
+                    <FieldLabel>Max</FieldLabel>
+                    <input className="wb-input text-[11px]" type="number" value={cur.max ?? ''} onChange={(e) => {
+                      const v = e.target.value.trim();
+                      updateState({ exclusionRanges: { ...(props.state.exclusionRanges ?? {}), [rangeKey]: { ...cur, max: v === '' ? undefined : Number(v) } } });
+                    }} />
+                  </div>
+                  <div className="w-16">
+                    <FieldLabel>Min</FieldLabel>
+                    <input className="wb-input text-[11px]" type="number" value={cur.min ?? ''} onChange={(e) => {
+                      const v = e.target.value.trim();
+                      updateState({ exclusionRanges: { ...(props.state.exclusionRanges ?? {}), [rangeKey]: { ...cur, min: v === '' ? undefined : Number(v) } } });
+                    }} />
+                  </div>
+                  <button type="button" className="wb-inline-button text-[11px]" onClick={() => {
+                    const next = { ...(props.state.exclusionRanges ?? {}) };
+                    delete next[rangeKey];
+                    updateState({ exclusionRanges: next });
+                  }}>×</button>
+                </div>
+              );
+            })}
+            <button type="button" className="wb-inline-button self-start text-[10px]" onClick={() => {
+              const used = new Set(Object.keys(props.state.exclusionRanges ?? {}));
+              const first = filterIdOptions.find((k) => !used.has(k));
+              if (first) updateState({ exclusionRanges: { ...(props.state.exclusionRanges ?? {}), [first]: {} } });
+            }}>
+              + Add exclusion
+            </button>
+          </div>
+        </details>
+
+        {/* Major IDs */}
         <div>
-          <FieldLabel>Major IDs (quick picks)</FieldLabel>
-          <div className="flex flex-wrap gap-2">
+          <FieldLabel>Major IDs</FieldLabel>
+          <div className="flex flex-wrap gap-1">
             {majorIdSuggestions.map((majorId) => (
               <ChipButton
                 key={majorId}
@@ -691,51 +574,33 @@ export function SearchPanel(props: {
           </div>
         </div>
 
-        <div className="wb-card p-2">
-          <div className="mb-2 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wide text-[var(--wb-muted)]">Filter Presets</div>
-            <div className="flex gap-2">
-              <Button
-                className="px-2 py-1 text-xs"
-                variant="ghost"
-                onClick={() => {
-                  const name = window.prompt('Preset name?')?.trim();
-                  if (!name) return;
-                  const next = [
-                    { name, state: props.state },
-                    ...presets.filter((preset) => preset.name.toLowerCase() !== name.toLowerCase()),
-                  ].slice(0, 20);
-                  setPresets(next);
-                }}
-              >
-                Save
-              </Button>
-              <Button className="px-2 py-1 text-xs" variant="ghost" onClick={() => props.setState(DEFAULT_SEARCH_FILTER_STATE)}>
-                Reset
-              </Button>
+        {/* Presets */}
+        <div className="rounded border border-[var(--wb-border-muted)] p-1.5">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Presets</span>
+            <div className="flex gap-1">
+              <button type="button" className="wb-inline-button text-[10px]" onClick={() => {
+                const name = window.prompt('Preset name?')?.trim();
+                if (!name) return;
+                setPresets([{ name, state: props.state }, ...presets.filter((p) => p.name.toLowerCase() !== name.toLowerCase())].slice(0, 20));
+              }}>Save</button>
+              <button type="button" className="wb-inline-button text-[10px]" onClick={() => props.setState(DEFAULT_SEARCH_FILTER_STATE)}>Reset</button>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-1">
             {presets.length === 0 ? (
-              <span className="text-xs text-[var(--wb-muted)]">No saved presets yet.</span>
-            ) : (
-              presets.map((preset) => (
-                <div key={preset.name} className="flex items-center gap-1">
-                  <ChipButton onClick={() => props.setState(preset.state)}>{preset.name}</ChipButton>
-                  <button
-                    className="wb-inline-button border border-[var(--wb-border)] px-1.5 py-0.5 text-xs"
-                    onClick={() => setPresets((prev) => prev.filter((x) => x.name !== preset.name))}
-                    title={`Delete ${preset.name}`}
-                  >
-                    x
-                  </button>
-                </div>
-              ))
-            )}
+              <span className="text-[10px] text-[var(--wb-text-quaternary)]">No saved presets.</span>
+            ) : presets.map((preset) => (
+              <div key={preset.name} className="flex items-center gap-0.5">
+                <ChipButton onClick={() => props.setState(preset.state)}>{preset.name}</ChipButton>
+                <button className="wb-inline-button px-1 text-[10px]" onClick={() => setPresets((p) => p.filter((x) => x.name !== preset.name))}>×</button>
+              </div>
+            ))}
           </div>
         </div>
 
-        {!props.state.resultsBelowBuild ? (
+        {/* Search results (in sidebar) */}
+        {!props.state.resultsBelowBuild && (
           <SearchResultList
             catalog={props.catalog}
             result={props.result}
@@ -746,8 +611,8 @@ export function SearchPanel(props: {
             onEquip={props.onEquip}
             onHover={props.onHover}
           />
-        ) : null}
+        )}
       </div>
-    </Panel>
+    </div>
   );
 }

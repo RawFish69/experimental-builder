@@ -38,7 +38,8 @@ import { abilityTreeCatalogService } from '@/domain/ability-tree/catalog-service
 import { evaluateAbilityTree, getClassTree } from '@/domain/ability-tree/logic';
 import type { AbilityTreeDataset, AbilityTreeSelectionsByClass } from '@/domain/ability-tree/types';
 import { buildWorkbenchSpellPreview } from '@/domain/ability-tree/spell-preview';
-import { Button } from '@/components/ui';
+import { Button, SidebarToggle } from '@/components/ui';
+import { CommandPalette } from '@/components/CommandPalette';
 
 function copyText(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
@@ -127,6 +128,10 @@ export function App() {
   const [searchTrigger, setSearchTrigger] = useState(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
 
+  // Layout state
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [statsPanelCollapsed, setStatsPanelCollapsed] = useState(false);
+
   const searchClientRef = useRef<SearchWorkerClient | null>(null);
   const searchTimerRef = useRef<number | null>(null);
   const writeUrlTimerRef = useRef<number | null>(null);
@@ -139,6 +144,7 @@ export function App() {
       craftedSlots: state.craftedSlots,
       binsByCategory: state.binsByCategory,
       locks: state.locks,
+      powdersBySlot: state.powdersBySlot,
       level: state.level,
       characterClass: state.characterClass,
       selectedSlot: state.selectedSlot,
@@ -164,6 +170,9 @@ export function App() {
       assignDraggedItemToSlot: state.assignDraggedItemToSlot,
       assignDraggedItemToBin: state.assignDraggedItemToBin,
       toggleLock: state.toggleLock,
+      setPowder: state.setPowder,
+      removePowder: state.removePowder,
+      clearPowders: state.clearPowders,
       undo: state.undo,
       redo: state.redo,
       hydrateSnapshot: state.hydrateSnapshot,
@@ -203,7 +212,6 @@ export function App() {
         setCatalog(loaded);
         setSearchClientReady(true);
 
-        // Import legacy hash into Workbench when present.
         if (initialParsed?.legacyHash) {
           setStatusMessage('Importing legacy builder hash...');
           try {
@@ -224,10 +232,10 @@ export function App() {
               legacyHash: decoded.legacyHash,
             });
             setLegacyHash(decoded.legacyHash);
-            setStatusMessage('Imported legacy builder hash into Workbench.');
+            setStatusMessage('Imported legacy builder hash.');
           } catch (error) {
             console.error(error);
-            setStatusMessage('Failed to import legacy hash automatically. You can still open it in legacy builder.');
+            setStatusMessage('Failed to import legacy hash.');
           }
         }
       } catch (error) {
@@ -323,11 +331,7 @@ export function App() {
   const summary = useMemo(() => {
     if (!catalog) return null;
     return evaluateBuild(
-      {
-        slots: snapshot.slots,
-        level: snapshot.level,
-        characterClass: snapshot.characterClass,
-      },
+      { slots: snapshot.slots, level: snapshot.level, characterClass: snapshot.characterClass },
       catalog,
       { skillpointTomeMode: snapshot.skillpointTomeMode ?? 'no_tomes' },
     );
@@ -356,11 +360,7 @@ export function App() {
     if (!preview.itemId || !preview.slot) return null;
     const slots = { ...snapshot.slots, [preview.slot]: preview.itemId };
     return evaluateBuild(
-      {
-        slots,
-        level: snapshot.level,
-        characterClass: snapshot.characterClass,
-      },
+      { slots, level: snapshot.level, characterClass: snapshot.characterClass },
       catalog,
       { skillpointTomeMode: snapshot.skillpointTomeMode ?? 'no_tomes' },
     );
@@ -368,21 +368,12 @@ export function App() {
 
   const spellPreview = useMemo(() => {
     if (!catalog) return null;
-    return buildWorkbenchSpellPreview({
-      catalog,
-      snapshot,
-      abilityTreeTree,
-      abilityTreeEvaluation,
-    });
+    return buildWorkbenchSpellPreview({ catalog, snapshot, abilityTreeTree, abilityTreeEvaluation });
   }, [catalog, snapshot, abilityTreeTree, abilityTreeEvaluation]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -458,27 +449,20 @@ export function App() {
   const exportWorkbench = () => {
     const code = encodeWorkbenchSnapshot(snapshot);
     const json = JSON.stringify(snapshot, null, 2);
-    window.prompt('Copy Workbench export (JSON). URL-safe code is also in the current ?wb= param.', json);
-    setStatusMessage(`Workbench export ready. Code length: ${code.length}`);
+    window.prompt('Copy Workbench export (JSON).', json);
+    setStatusMessage(`Export ready. Code: ${code.length} chars`);
   };
 
   const openInWynnBuilder = () => {
-    if (!catalog) {
-      setStatusMessage('Catalog not loaded yet.');
-      return;
-    }
+    if (!catalog) { setStatusMessage('Catalog not loaded.'); return; }
     const hash = encodeBuildHash(snapshot, catalog);
-    if (!hash) {
-      setStatusMessage('No items equipped — nothing to export.');
-      return;
-    }
-    const url = getWynnBuilderBuildUrl(hash);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setStatusMessage('Opened build in WynnBuilder.');
+    if (!hash) { setStatusMessage('No items equipped.'); return; }
+    window.open(getWynnBuilderBuildUrl(hash), '_blank', 'noopener,noreferrer');
+    setStatusMessage('Opened in WynnBuilder.');
   };
 
   const importWorkbench = async () => {
-    const raw = window.prompt('Paste a Workbench JSON export, Workbench URL, or legacy builder URL/hash.');
+    const raw = window.prompt('Paste Workbench JSON, URL, or legacy hash.');
     if (!raw) return;
     const trimmed = raw.trim();
     try {
@@ -495,7 +479,7 @@ export function App() {
           legacyHash: decoded.legacyHash,
         });
         store.setLegacyHash(decoded.legacyHash);
-        setStatusMessage('Imported legacy build hash.');
+        setStatusMessage('Imported legacy hash.');
         return;
       }
 
@@ -510,16 +494,16 @@ export function App() {
           setAbilityTreeSelectionsByClass(atreeState.selectedByClass ?? {});
           setAbilityTreeVersionHint(atreeState.version ?? null);
         }
-        setStatusMessage('Imported Workbench URL state.');
+        setStatusMessage('Imported URL state.');
         return;
       }
 
       const parsed = JSON.parse(trimmed) as Partial<WorkbenchSnapshot>;
       store.hydrateSnapshot(parsed);
-      setStatusMessage('Imported Workbench JSON.');
+      setStatusMessage('Imported JSON.');
     } catch (error) {
       console.error(error);
-      setStatusMessage('Import failed. Check the pasted JSON/URL/hash.');
+      setStatusMessage('Import failed.');
     }
   };
 
@@ -528,24 +512,18 @@ export function App() {
       search: searchState,
       workbenchSnapshot: snapshot,
       mode: autoBuilderOpen ? 'autobuilder' : abilityTreeOpen ? 'abilitytree' : null,
-      abilityTreeState: {
-        version: abilityTreeVersionHint,
-        selectedByClass: abilityTreeSelectionsByClass,
-      },
+      abilityTreeState: { version: abilityTreeVersionHint, selectedByClass: abilityTreeSelectionsByClass },
       replace: true,
     });
     await copyText(window.location.href);
-    setStatusMessage('Workbench link copied.');
+    setStatusMessage('Link copied.');
   };
 
   const copyLegacyLink = async () => {
-    if (!snapshot.legacyHash) {
-      setStatusMessage('No imported legacy hash is currently available.');
-      return;
-    }
+    if (!snapshot.legacyHash) { setStatusMessage('No legacy hash available.'); return; }
     const url = new URL(getLegacyBuilderUrl(snapshot.legacyHash), window.location.href).href;
     await copyText(url);
-    setStatusMessage('Legacy builder link copied.');
+    setStatusMessage('Legacy link copied.');
   };
 
   const openLegacyBuilder = () => {
@@ -570,26 +548,14 @@ export function App() {
     setRecipeSolverOpen(true);
   };
 
-  const tutorialButton = (
-    <a
-      className="wb-video-help"
-      href={tutorialUrl}
-      target="_blank"
-      rel="noopener noreferrer"
-      title="Watch the how-to video"
-      aria-label="Watch the how-to video"
-    >
-      <CirclePlay size={18} strokeWidth={2.4} />
-      <span>How to Use</span>
-    </a>
-  );
+  /* ─── Loading / Error states ─── */
 
   if (catalogError) {
     return (
       <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
-        <div className="wb-panel max-w-xl rounded-2xl p-6">
-          <div className="text-xl font-semibold">Failed to load</div>
-          <div className="mt-2 text-sm text-[var(--wb-muted)]">{catalogError}</div>
+        <div className="wb-panel max-w-md rounded-lg p-5">
+          <div className="text-base font-semibold">Failed to load</div>
+          <div className="mt-1 text-[13px] text-[var(--wb-text-secondary)]">{catalogError}</div>
         </div>
       </div>
     );
@@ -598,182 +564,238 @@ export function App() {
   if (!catalog || !summary) {
     return (
       <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
-        <div className="wb-panel max-w-xl rounded-2xl p-6">
-          <div className="text-xl font-semibold">Loading...</div>
-          <div className="mt-2 text-sm text-[var(--wb-muted)]">Preparing item catalog, search index, and build state.</div>
+        <div className="wb-panel max-w-md rounded-lg p-5">
+          <div className="text-base font-semibold">Loading...</div>
+          <div className="mt-1 text-[13px] text-[var(--wb-text-secondary)]">
+            Preparing item catalog, search index, and build state.
+          </div>
         </div>
       </div>
     );
   }
 
+  /* ─── Main layout ─── */
+
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-      <div className="wb-app-shell flex min-h-screen flex-col gap-3 p-3 lg:p-4">
-        <header className="wb-panel wb-hero rounded-2xl px-4 py-3">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="wb-theme-toggle">
-                  <span className="wb-theme-toggle-label">Theme</span>
-                  {(['minimal', 'classic'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      type="button"
-                      className="wb-theme-toggle-button"
-                      data-active={themeMode === mode ? 'true' : 'false'}
-                      onClick={() => setThemeMode(mode)}
-                    >
-                      {mode === 'minimal' ? 'Minimal' : 'Classic'}
-                    </button>
-                  ))}
-                </div>
-                <span className="wb-chip">Legacy-compatible imports</span>
-                {abilityTreeEvaluation ? (
-                  <span className="wb-chip" data-tone="success">
-                    Ability Tree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
-                  </span>
-                ) : null}
-              </div>
-              <div className="text-xs text-[var(--wb-muted)]">
-                Modular loadout planning studio with legacy builder compatibility.
-              </div>
-            </div>
+      <div className="wb-app-shell flex h-screen flex-col overflow-hidden">
+        {/* ─── TopBar (48px) ─── */}
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-3">
+          {/* Left section */}
+          <SidebarToggle collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} side="left" />
 
-            {tutorialButton}
+          <div className="wb-theme-toggle">
+            <span className="wb-theme-toggle-label">Theme</span>
+            {(['dark', 'light'] as const).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                className="wb-theme-toggle-button"
+                data-active={themeMode === mode ? 'true' : 'false'}
+                onClick={() => setThemeMode(mode)}
+              >
+                {mode === 'dark' ? 'Dark' : 'Light'}
+              </button>
+            ))}
+          </div>
 
+          {abilityTreeEvaluation && (
+            <span className="wb-chip" data-tone="success">
+              ATree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
+            </span>
+          )}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Center: Build Solver + Help */}
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
-              className="build-solver-logo-btn order-first flex shrink-0 cursor-pointer items-center justify-center gap-2 self-center rounded-xl px-6 py-3 text-lg font-bold tracking-tight shadow-lg sm:px-8 sm:py-4 sm:text-xl lg:order-none"
+              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold text-[var(--wb-accent)] transition-colors hover:bg-[var(--wb-accent-muted)]"
               onClick={openAutoBuilder}
-              title="Open Build Solver for automated build search"
+              title="Open Build Solver"
             >
-              <Hammer size={28} style={{ color: 'var(--wb-brand-icon)' }} strokeWidth={2.5} />
-              Build Solver
+              <Hammer size={16} />
+              <span className="hidden sm:inline">Build Solver</span>
             </button>
-
-            <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-[var(--wb-muted)]">Class</label>
-                <select
-                  className="wb-select w-36"
-                  value={snapshot.characterClass ?? ''}
-                  onChange={(e) => store.setCharacterClass((e.target.value || null) as WorkbenchSnapshot['characterClass'])}
-                >
-                  <option value="">Auto / Any</option>
-                  <option value="Warrior">Warrior</option>
-                  <option value="Assassin">Assassin</option>
-                  <option value="Mage">Mage</option>
-                  <option value="Archer">Archer</option>
-                  <option value="Shaman">Shaman</option>
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-[var(--wb-muted)]">Level</label>
-                <input
-                  className="wb-input w-22"
-                  type="number"
-                  min={1}
-                  max={120}
-                  value={snapshot.level}
-                  onChange={(e) => store.setLevel(Number(e.target.value))}
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-[var(--wb-muted)]" title="Assume tomes for SP feasibility">
-                  SP Tomes
-                </label>
-                <select
-                  className="wb-select w-36"
-                  value={snapshot.skillpointTomeMode ?? 'no_tomes'}
-                  onChange={(e) => store.setSkillpointTomeMode((e.target.value || 'no_tomes') as WorkbenchSnapshot['skillpointTomeMode'])}
-                >
-                  <option value="no_tomes">None (200)</option>
-                  <option value="guild_rainbow">Guild rainbow (+1 each)</option>
-                  <option value="flexible_2">+2 flexible</option>
-                </select>
-              </div>
-              <Button variant="ghost" onClick={shareWorkbench}>
-                <Link2 size={13} className="mr-1 inline" />
-                Share Session
-              </Button>
-              <Button variant="ghost" onClick={openAbilityTree}>
-                <TreePine size={13} className="mr-1 inline" />
-                Ability Tree
-              </Button>
-              <Button variant="primary" onClick={openRecipeSolver}>
-                Recipe Solver
-              </Button>
-            </div>
+            <a
+              className="wb-button px-2 py-1 text-[11px]"
+              data-variant="ghost"
+              href={tutorialUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <CirclePlay size={12} className="mr-1" />
+              Help
+            </a>
           </div>
-          {statusMessage ? <div className="mt-3 text-xs wb-text-success">{statusMessage}</div> : null}
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Right controls */}
+          <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
+              <label className="text-[11px] text-[var(--wb-text-quaternary)]">Class</label>
+              <select
+                className="wb-select w-28"
+                value={snapshot.characterClass ?? ''}
+                onChange={(e) => store.setCharacterClass((e.target.value || null) as WorkbenchSnapshot['characterClass'])}
+              >
+                <option value="">Auto</option>
+                <option value="Warrior">Warrior</option>
+                <option value="Assassin">Assassin</option>
+                <option value="Mage">Mage</option>
+                <option value="Archer">Archer</option>
+                <option value="Shaman">Shaman</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-1">
+              <label className="text-[11px] text-[var(--wb-text-quaternary)]">Lv.</label>
+              <input
+                className="wb-input w-16"
+                type="number"
+                min={1}
+                max={120}
+                value={snapshot.level}
+                onChange={(e) => store.setLevel(Number(e.target.value))}
+              />
+            </div>
+            <div className="hidden items-center gap-1 lg:flex">
+              <label className="text-[11px] text-[var(--wb-text-quaternary)]">Tomes</label>
+              <select
+                className="wb-select w-32"
+                value={snapshot.skillpointTomeMode ?? 'no_tomes'}
+                onChange={(e) => store.setSkillpointTomeMode((e.target.value || 'no_tomes') as WorkbenchSnapshot['skillpointTomeMode'])}
+              >
+                <option value="no_tomes">None (200)</option>
+                <option value="guild_rainbow">Guild +1</option>
+                <option value="flexible_2">+2 Flex</option>
+              </select>
+            </div>
+
+            <div className="mx-1 h-5 w-px bg-[var(--wb-border-muted)]" />
+
+            <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => void shareWorkbench()}>
+              <Link2 size={12} className="mr-1" />
+              Share
+            </Button>
+            <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={openAbilityTree}>
+              <TreePine size={12} className="mr-1" />
+              ATree
+            </Button>
+            <Button variant="primary" className="px-2 py-1 text-[11px]" onClick={openRecipeSolver}>
+              Recipe
+            </Button>
+            <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
+          </div>
         </header>
 
-        <main className="grid min-h-0 flex-1 grid-cols-1 gap-3 xl:grid-cols-[minmax(300px,22vw)_minmax(0,1fr)_440px] 2xl:grid-cols-[320px_minmax(0,1fr)_480px]">
-          <SearchPanel
-            catalog={catalog}
-            state={searchState}
-            setState={setSearchState}
-            result={searchResult}
-            loading={searchLoading}
-            selectedSlot={snapshot.selectedSlot}
-            onPin={handlePinFromSearch}
-            onEquip={handleEquipFromSearch}
-            onHover={() => {}}
-            onSearch={() => setSearchTrigger((t) => t + 1)}
-          />
+        {/* Status bar */}
+        {statusMessage && (
+          <div className="flex h-6 items-center border-b border-[var(--wb-border-muted)] bg-[var(--wb-success-muted)] px-3 text-[11px] text-[var(--wb-success)]">
+            {statusMessage}
+            <button
+              type="button"
+              className="ml-auto text-[10px] text-[var(--wb-text-tertiary)] hover:text-[var(--wb-text)]"
+              onClick={() => setStatusMessage('')}
+            >
+              dismiss
+            </button>
+          </div>
+        )}
 
-          <WorkbenchBoard
-            catalog={catalog}
-            store={store}
-            onHoverItem={(itemId, slot) => store.setComparePreview(itemId && slot ? { itemId, slot } : null)}
-            onShareWorkbench={() => void shareWorkbench()}
-            onExportWorkbench={exportWorkbench}
-            onImportWorkbench={() => void importWorkbench()}
-            onOpenInWynnBuilder={openInWynnBuilder}
-            searchResults={
-              searchState.resultsBelowBuild ? (
-                <SearchResultList
-                  catalog={catalog}
-                  result={searchResult}
-                  selectedSlot={snapshot.selectedSlot}
-                  state={searchState}
-                  loading={searchLoading}
-                  onPin={handlePinFromSearch}
-                  onEquip={handleEquipFromSearch}
-                  onHover={() => {}}
-                  embedded
-                />
-              ) : undefined
-            }
-          />
+        {/* ─── Content area (3-column) ─── */}
+        <div className="flex min-h-0 flex-1">
+          {/* Left Sidebar */}
+          {!sidebarCollapsed && (
+            <aside className="flex w-[280px] shrink-0 flex-col border-r border-[var(--wb-surface-border)] bg-[var(--wb-surface)] xl:w-[320px]">
+              <SearchPanel
+                catalog={catalog}
+                state={searchState}
+                setState={setSearchState}
+                result={searchResult}
+                loading={searchLoading}
+                selectedSlot={snapshot.selectedSlot}
+                onPin={handlePinFromSearch}
+                onEquip={handleEquipFromSearch}
+                onHover={() => {}}
+                onSearch={() => setSearchTrigger((t) => t + 1)}
+              />
+            </aside>
+          )}
 
-          <BuildSummaryPanel
-            catalog={catalog}
-            snapshot={snapshot}
-            summary={summary}
-            compareSummary={compareSummary}
-            compareSlot={snapshot.comparePreview.slot}
-            spellPreview={spellPreview}
-            abilityTreeSummary={
-              abilityTreeEvaluation && abilityTreeClass
-                ? {
-                    className: abilityTreeClass,
-                    apUsed: abilityTreeEvaluation.apUsed,
-                    apCap: abilityTreeEvaluation.apCap,
-                    selectedCount: abilityTreeEvaluation.activeIds.length,
-                    hasErrors: abilityTreeEvaluation.errors.length > 0 || abilityTreeEvaluation.apUsed > abilityTreeEvaluation.apCap,
-                  }
-                : null
-            }
-            actions={{
-              onOpenAbilityTree: openAbilityTree,
-              onCopyLegacyLink: () => void copyLegacyLink(),
-              onOpenLegacyBuilder: openLegacyBuilder,
-            }}
-          />
-        </main>
+          {/* Main panel */}
+          <main className="min-w-0 flex-1 overflow-auto bg-[var(--wb-canvas)] wb-scrollbar">
+            <WorkbenchBoard
+              catalog={catalog}
+              store={store}
+              onHoverItem={(itemId, slot) => store.setComparePreview(itemId && slot ? { itemId, slot } : null)}
+              onShareWorkbench={() => void shareWorkbench()}
+              onExportWorkbench={exportWorkbench}
+              onImportWorkbench={() => void importWorkbench()}
+              onOpenInWynnBuilder={openInWynnBuilder}
+              searchResults={
+                searchState.resultsBelowBuild ? (
+                  <SearchResultList
+                    catalog={catalog}
+                    result={searchResult}
+                    selectedSlot={snapshot.selectedSlot}
+                    state={searchState}
+                    loading={searchLoading}
+                    onPin={handlePinFromSearch}
+                    onEquip={handleEquipFromSearch}
+                    onHover={() => {}}
+                    embedded
+                  />
+                ) : undefined
+              }
+            />
+          </main>
+
+          {/* Right Stats Panel */}
+          {!statsPanelCollapsed && (
+            <aside className="flex w-[400px] shrink-0 flex-col overflow-auto border-l border-[var(--wb-surface-border)] bg-[var(--wb-surface)] wb-scrollbar xl:w-[440px]">
+              <BuildSummaryPanel
+                catalog={catalog}
+                snapshot={snapshot}
+                summary={summary}
+                compareSummary={compareSummary}
+                compareSlot={snapshot.comparePreview.slot}
+                spellPreview={spellPreview}
+                abilityTreeSummary={
+                  abilityTreeEvaluation && abilityTreeClass
+                    ? {
+                        className: abilityTreeClass,
+                        apUsed: abilityTreeEvaluation.apUsed,
+                        apCap: abilityTreeEvaluation.apCap,
+                        selectedCount: abilityTreeEvaluation.activeIds.length,
+                        hasErrors: abilityTreeEvaluation.errors.length > 0 || abilityTreeEvaluation.apUsed > abilityTreeEvaluation.apCap,
+                      }
+                    : null
+                }
+                actions={{
+                  onOpenAbilityTree: openAbilityTree,
+                  onCopyLegacyLink: () => void copyLegacyLink(),
+                  onOpenLegacyBuilder: openLegacyBuilder,
+                }}
+              />
+            </aside>
+          )}
+        </div>
       </div>
 
+      {/* ─── Command Palette ─── */}
+      <CommandPalette
+        onSearch={() => setSidebarCollapsed(false)}
+        onOpenAutoBuilder={openAutoBuilder}
+        onOpenAbilityTree={openAbilityTree}
+        onOpenRecipeSolver={openRecipeSolver}
+        onShare={() => void shareWorkbench()}
+      />
+
+      {/* ─── Modals ─── */}
       <AutoBuilderModal
         open={autoBuilderOpen}
         onOpenChange={setAutoBuilderOpen}
@@ -782,7 +804,7 @@ export function App() {
         onLoadCandidate={(candidate) => {
           store.loadCandidate(candidate.slots);
           setAutoBuilderOpen(false);
-          setStatusMessage('Loaded Build Solver candidate into Workbench.');
+          setStatusMessage('Loaded Build Solver candidate.');
         }}
       />
       <AbilityTreeModal

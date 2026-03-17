@@ -57,6 +57,36 @@ function parseRejectStatsFromDetail(detail: string | undefined): { spInvalid: nu
   };
 }
 
+const SP_LABELS = ['Str', 'Dex', 'Int', 'Def', 'Agi'] as const;
+const SP_KEYS = ['str', 'dex', 'int', 'def', 'agi'] as const;
+const SP_COLORS = [
+  'var(--wb-elem-earth)',
+  'var(--wb-elem-thunder)',
+  'var(--wb-elem-water)',
+  'var(--wb-elem-fire)',
+  'var(--wb-elem-air)',
+] as const;
+
+function CandidateSkillPoints(props: { sp: { str: number; dex: number; int: number; def: number; agi: number }; assigned: number; textClass?: string }) {
+  const { sp, assigned, textClass = 'text-[var(--wb-text-secondary)]' } = props;
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <span className={`text-[11px] font-medium ${textClass}`} style={{ fontFamily: 'var(--font-mono)' }}>
+        SP Assigned: {Math.round(assigned)}
+      </span>
+      {SP_KEYS.map((key, i) => {
+        const val = sp[key];
+        if (val === 0) return null;
+        return (
+          <span key={key} className="text-[11px] font-medium" style={{ fontFamily: 'var(--font-mono)', color: SP_COLORS[i] }}>
+            {SP_LABELS[i]} {val > 0 ? '+' : ''}{val}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 const WEAPON_ATTACK_SPEED_OPTIONS = ['SUPER_SLOW', 'VERY_SLOW', 'SLOW', 'NORMAL', 'FAST', 'VERY_FAST', 'SUPER_FAST'] as const;
 type OptimizationPreset = 'constraints' | 'spell' | 'melee' | 'mobility' | 'tank';
 type SolverStrategy = 'auto' | 'fast' | 'constraint' | 'exhaustive';
@@ -873,7 +903,12 @@ export function AutoBuilderModal(props: {
                 Cancel
               </Button>
             ) : null}
-            <Button variant="primary" onClick={run} disabled={!props.catalog || running}>
+            <Button
+              variant="primary"
+              onClick={run}
+              disabled={!props.catalog || running || (primaryPreset === 'constraints' && !hasAdvancedIdThresholds)}
+              title={primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? 'Add at least one Advanced ID threshold first' : undefined}
+            >
               Generate Candidates
             </Button>
           </div>
@@ -1046,7 +1081,7 @@ export function AutoBuilderModal(props: {
                   })}
                 </div>
               </div>
-              <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
+              <div className="rounded-xl border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)] p-2 text-xs text-[var(--wb-muted)]">
                 Build Solver always filters out builds that fail skill point/equip-order feasibility. You do not need to set a minimum SP total.
               </div>
             </div>
@@ -1093,8 +1128,8 @@ export function AutoBuilderModal(props: {
                 />
               </div>
 
-              <details className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2">
-                <summary className="cursor-pointer text-sm font-medium">Advanced: Specific ID Min / Max</summary>
+              <details className="rounded-xl border border-[var(--wb-accent-border)] bg-[var(--wb-layer-1)] p-2">
+                <summary className="cursor-pointer text-sm font-medium text-[var(--wb-accent)]">Advanced: Specific ID Min / Max</summary>
                 <div className="mt-3 grid gap-3">
                   <div className="text-xs text-[var(--wb-muted)]">
                     Set build-wide min/max totals for any numeric ID (e.g. `mr`, `ms`, `spd`, `reqTotal`, `sdPct`, `poison`, `atkTier`). Any Advanced ID threshold makes Advanced IDs the primary solver objective; non-Constraints goals only affect tie-breakers. The Constraints goal still runs in pure custom-objective mode.
@@ -1107,7 +1142,7 @@ export function AutoBuilderModal(props: {
                   {customIdThresholds.map((row) => {
                     const range = props.catalog?.facetsMeta.numericRanges[row.key];
                     return (
-                      <div key={row.id} className="rounded-lg border border-[var(--wb-border-muted)] p-2">
+                      <div key={row.id} className="rounded-lg border border-[var(--wb-border)] bg-[var(--wb-surface)] p-2">
                         <div className="flex flex-col gap-2">
                           <div>
                             <FieldLabel>ID</FieldLabel>
@@ -1148,14 +1183,14 @@ export function AutoBuilderModal(props: {
                                 }}
                               />
                             </div>
-                            <Button variant="ghost" className="shrink-0" onClick={() => removeCustomIdThresholdRow(row.id)}>
+                            <Button variant="ghost" className="shrink-0 text-[var(--wb-danger)]" onClick={() => removeCustomIdThresholdRow(row.id)}>
                               Remove
                             </Button>
                           </div>
                         </div>
                         {range ? (
-                          <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
-                            Catalog item range: {range.min} to {range.max} (per item)
+                          <div className="mt-1 text-[11px] text-[var(--wb-text-tertiary)]">
+                            Catalog range: {range.min} to {range.max} per item
                           </div>
                         ) : null}
                       </div>
@@ -1171,9 +1206,9 @@ export function AutoBuilderModal(props: {
                     </Button>
                   </div>
                   {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
-                    <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] text-amber-50">
-                      Constraints is pure Advanced-ID mode, but no Advanced ID thresholds are set.
-                      Add at least one Min or Max threshold, or switch primary goal. You can still run the solver without this.
+                    <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] font-medium text-amber-50">
+                      You must add at least one Advanced ID threshold (Min or Max) before generating.
+                      The Constraints goal requires explicit ID targets to optimize against.
                     </div>
                   ) : null}
                 </div>
@@ -1423,7 +1458,7 @@ export function AutoBuilderModal(props: {
                 min={1}
                 max={150}
               />
-              <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
+              <div className="rounded-xl border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)] p-2 text-xs text-[var(--wb-muted)]">
                 Locked slots from the Workbench will be preserved. Current locks: {Object.values(lockedSlots).filter(Boolean).length}
                 {onlyPinnedItems ? ' | Candidate pools restricted to pinned bins.' : ''}
                 {solverStrategies.length > 0 && !(solverStrategies.length === 1 && solverStrategies[0] === 'auto')
@@ -1463,8 +1498,22 @@ export function AutoBuilderModal(props: {
 
                   <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1 wb-scrollbar">
                     {shownCandidates.length === 0 && !showNearMisses ? (
-                      <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4 text-sm text-[var(--wb-muted)]">
-                        Run Build Solver to generate candidate builds.
+                      <div className="space-y-2">
+                        {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
+                          <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-4">
+                            <div className="text-sm font-semibold text-amber-200">Setup Required</div>
+                            <div className="mt-1 text-xs text-amber-100/80">
+                              You&apos;re in <b>Advanced IDs only</b> mode. Add at least one Advanced ID threshold (Min or Max) in the left panel before generating.
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-dashed border-[var(--wb-border)] p-4">
+                            <div className="text-sm font-medium text-[var(--wb-text-secondary)]">No candidates yet</div>
+                            <div className="mt-1 text-xs text-[var(--wb-muted)]">
+                              Click <b>Generate Candidates</b> above to run the Build Solver. Make sure you have at least one Advanced ID threshold set.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : null}
                     {shownCandidates.map((candidate, index) => (
@@ -1473,7 +1522,7 @@ export function AutoBuilderModal(props: {
                         className={
                           isPreview
                             ? 'rounded-xl border border-[var(--wb-info-border)] bg-[var(--wb-info-soft)] p-3'
-                            : 'rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-3'
+                            : 'rounded-xl border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)] p-3'
                         }
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -1481,12 +1530,16 @@ export function AutoBuilderModal(props: {
                             <div className="text-sm font-semibold">
                               #{index + 1} | Score {Math.max(0, Math.round(candidate.score)).toLocaleString()}
                             </div>
-                            <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                              HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                            <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-[var(--wb-muted)]">
+                              <span>HP {Math.round(candidate.summary.aggregated.hpTotal)}</span>
+                              <span>Req {candidate.summary.derived.reqTotal}</span>
+                              <span>MR {candidate.summary.aggregated.mr}</span>
+                              <span>MS {candidate.summary.aggregated.ms}</span>
                             </div>
-                            <div className="mt-1 text-xs text-[var(--wb-muted)]">
-                              SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
-                            </div>
+                            <CandidateSkillPoints
+                              sp={candidate.summary.aggregated.skillPoints}
+                              assigned={candidate.summary.derived.assignedSkillPointsRequired}
+                            />
                             {isPreview ? (
                               <div className="mt-1 text-[11px] text-[var(--wb-muted)]">
                                 Live preview only – may not be a complete or fully feasible build.
@@ -1501,7 +1554,7 @@ export function AutoBuilderModal(props: {
                         </div>
                         <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
                           {ITEM_SLOTS.map((slot) => (
-                            <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-black/10 px-2 py-1">
+                            <div key={slot} className="min-w-0 rounded-md border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)] px-2 py-1">
                               <div className="text-[10px] uppercase tracking-wide text-[var(--wb-muted)]">{slot}</div>
                               <div className="truncate">
                                 {candidate.slots[slot] != null
@@ -1534,12 +1587,17 @@ export function AutoBuilderModal(props: {
                                 <div className="text-sm font-semibold text-amber-200">
                                   Near-miss #{index + 1} | Score {Math.max(0, Math.round(candidate.score)).toLocaleString()}
                                 </div>
-                                <div className="mt-1 text-xs text-amber-100/70">
-                                  HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-100/70">
+                                  <span>HP {Math.round(candidate.summary.aggregated.hpTotal)}</span>
+                                  <span>Req {candidate.summary.derived.reqTotal}</span>
+                                  <span>MR {candidate.summary.aggregated.mr}</span>
+                                  <span>MS {candidate.summary.aggregated.ms}</span>
                                 </div>
-                                <div className="mt-1 text-xs text-amber-100/70">
-                                  SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
-                                </div>
+                                <CandidateSkillPoints
+                                  sp={candidate.summary.aggregated.skillPoints}
+                                  assigned={candidate.summary.derived.assignedSkillPointsRequired}
+                                  textClass="text-amber-100/70"
+                                />
                                 {candidate.nearMissReasons?.length ? (
                                   <div className="mt-2 space-y-0.5">
                                     {candidate.nearMissReasons.map((reason, ri) => (
@@ -1560,7 +1618,7 @@ export function AutoBuilderModal(props: {
                             </div>
                             <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
                               {ITEM_SLOTS.map((slot) => (
-                                <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-black/10 px-2 py-1">
+                                <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-[var(--wb-layer-1)] px-2 py-1">
                                   <div className="text-[10px] uppercase tracking-wide text-amber-200/60">{slot}</div>
                                   <div className="truncate text-amber-100/80">
                                     {candidate.slots[slot] != null
@@ -1604,12 +1662,17 @@ export function AutoBuilderModal(props: {
                                     <div className="text-sm font-semibold text-amber-200">
                                       Loose #{index + 1} | Score {Math.max(0, Math.round(candidate.score)).toLocaleString()}
                                     </div>
-                                    <div className="mt-1 text-xs text-amber-100/70">
-                                      HP {Math.round(candidate.summary.aggregated.hpTotal)} | Req {candidate.summary.derived.reqTotal}
+                                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-100/70">
+                                      <span>HP {Math.round(candidate.summary.aggregated.hpTotal)}</span>
+                                      <span>Req {candidate.summary.derived.reqTotal}</span>
+                                      <span>MR {candidate.summary.aggregated.mr}</span>
+                                      <span>MS {candidate.summary.aggregated.ms}</span>
                                     </div>
-                                    <div className="mt-1 text-xs text-amber-100/70">
-                                      SP Needed {Math.round(candidate.summary.derived.assignedSkillPointsRequired)} | MR {candidate.summary.aggregated.mr} | MS {candidate.summary.aggregated.ms}
-                                    </div>
+                                    <CandidateSkillPoints
+                                      sp={candidate.summary.aggregated.skillPoints}
+                                      assigned={candidate.summary.derived.assignedSkillPointsRequired}
+                                      textClass="text-amber-100/70"
+                                    />
                                     {candidate.nearMissReasons?.length ? (
                                       <div className="mt-2 space-y-0.5">
                                         {candidate.nearMissReasons.map((reason, ri) => (
@@ -1630,7 +1693,7 @@ export function AutoBuilderModal(props: {
                                 </div>
                                 <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
                                   {ITEM_SLOTS.map((slot) => (
-                                    <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-black/10 px-2 py-1">
+                                    <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-[var(--wb-layer-1)] px-2 py-1">
                                       <div className="text-[10px] uppercase tracking-wide text-amber-200/60">{slot}</div>
                                       <div className="truncate text-amber-100/80">
                                         {candidate.slots[slot] != null
@@ -1652,14 +1715,15 @@ export function AutoBuilderModal(props: {
             })()}
             {statusMessage ? (
               <details
+                open={statusIsError}
                 className={`mt-2 rounded-xl border p-2 ${
                   statusIsError
-                    ? 'border-rose-400/30 bg-rose-400/8 text-rose-100'
+                    ? 'border-rose-400/30 bg-rose-400/10 text-rose-100'
                     : 'border-sky-400/20 bg-sky-400/5 text-sky-100'
                 }`}
               >
                 <summary className="cursor-pointer list-none text-xs font-medium">
-                  {statusIsError ? 'Run issue (click to expand)' : 'Diagnostics (click to expand)'}
+                  {statusIsError ? 'No results — see details' : 'Diagnostics (click to expand)'}
                 </summary>
                 <div className="mt-2 text-xs leading-relaxed">{statusMessage}</div>
               </details>

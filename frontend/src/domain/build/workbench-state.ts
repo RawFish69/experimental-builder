@@ -27,6 +27,7 @@ export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
     craftedSlots: {},
     binsByCategory: createEmptyBins(),
     locks: createEmptyLocks(),
+    powdersBySlot: {},
     level: 120,
     characterClass: null,
     selectedSlot: 'weapon',
@@ -34,6 +35,20 @@ export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
     legacyHash: null,
     skillpointTomeMode: 'no_tomes',
   };
+}
+
+function clonePowders(p: Partial<Record<ItemSlot, number[]>> | undefined): Partial<Record<ItemSlot, number[]>> {
+  if (!p) return {};
+  const out: Partial<Record<ItemSlot, number[]>> = {};
+  for (const [k, v] of Object.entries(p)) {
+    if (v && v.length > 0) out[k as ItemSlot] = [...v];
+  }
+  return out;
+}
+
+function ensurePowders(state: WorkbenchBuildState): Partial<Record<ItemSlot, number[]>> {
+  if (!state.powdersBySlot) state.powdersBySlot = {};
+  return state.powdersBySlot;
 }
 
 function snapshotOf(state: WorkbenchBuildState): WorkbenchSnapshot {
@@ -44,6 +59,7 @@ function snapshotOf(state: WorkbenchBuildState): WorkbenchSnapshot {
       ITEM_CATEGORY_KEYS.map((category) => [category, [...state.binsByCategory[category]]]),
     ) as WorkbenchSnapshot['binsByCategory'],
     locks: { ...state.locks },
+    powdersBySlot: clonePowders(state.powdersBySlot ?? {}),
     level: state.level,
     characterClass: state.characterClass,
     selectedSlot: state.selectedSlot,
@@ -68,6 +84,7 @@ function applySnapshot(state: WorkbenchBuildState, snap: WorkbenchSnapshot): voi
     ITEM_CATEGORY_KEYS.map((category) => [category, [...snap.binsByCategory[category]]]),
   ) as WorkbenchSnapshot['binsByCategory'];
   state.locks = { ...snap.locks };
+  state.powdersBySlot = clonePowders(snap.powdersBySlot ?? {});
   state.level = snap.level;
   state.characterClass = snap.characterClass;
   state.selectedSlot = snap.selectedSlot;
@@ -107,6 +124,9 @@ export interface WorkbenchStore extends WorkbenchBuildState {
     sourceSlot?: ItemSlot;
   }): void;
   toggleLock(slot: ItemSlot): void;
+  setPowder(slot: ItemSlot, powderIndex: number, powderId: number): void;
+  removePowder(slot: ItemSlot, powderIndex: number): void;
+  clearPowders(slot: ItemSlot): void;
   equipCraftedItem(slot: ItemSlot, info: CraftedSlotInfo): void;
   clearCraftedSlot(slot: ItemSlot): void;
   undo(): void;
@@ -187,6 +207,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         pushHistory(state);
         state.slots = createEmptySlots();
         state.craftedSlots = {};
+        ensurePowders(state);
+        state.powdersBySlot = {};
         state.binsByCategory = createEmptyBins();
         state.comparePreview = { ...EMPTY_COMPARE };
         state.legacyHash = null;
@@ -198,6 +220,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         pushHistory(state);
         state.slots[slot] = itemId;
         delete state.craftedSlots[slot];
+        const powders = ensurePowders(state);
+        delete powders[slot];
         state.selectedSlot = slot;
       });
     },
@@ -210,6 +234,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         const category = slotToCategory(slot);
         dedupePush(state.binsByCategory[category], itemId);
         state.slots[slot] = null;
+        const powders = ensurePowders(state);
+        delete powders[slot];
       });
     },
 
@@ -219,15 +245,21 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         const tmp = state.slots[a];
         state.slots[a] = state.slots[b];
         state.slots[b] = tmp;
+        const powders = ensurePowders(state);
+        const tmpP = powders[a];
+        powders[a] = powders[b];
+        powders[b] = tmpP;
       });
     },
 
     assignDraggedItemToSlot({ targetSlot, source, itemId, sourceCategory, sourceSlot }) {
       set((state) => {
         pushHistory(state);
+        const powders = ensurePowders(state);
         const previousTarget = state.slots[targetSlot];
         state.slots[targetSlot] = itemId;
         delete state.craftedSlots[targetSlot];
+        delete powders[targetSlot];
         state.selectedSlot = targetSlot;
         if (source === 'bin' && sourceCategory) {
           state.binsByCategory[sourceCategory] = state.binsByCategory[sourceCategory].filter((id) => id !== itemId);
@@ -235,6 +267,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         if (source === 'slot' && sourceSlot) {
           if (sourceSlot !== targetSlot) {
             state.slots[sourceSlot] = previousTarget ?? null;
+            delete powders[sourceSlot];
           }
         }
       });
@@ -248,6 +281,8 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
         }
         if (source === 'slot' && sourceSlot) {
           state.slots[sourceSlot] = null;
+          const powders = ensurePowders(state);
+          delete powders[sourceSlot];
         }
         dedupePush(state.binsByCategory[targetCategory], itemId);
       });
@@ -260,11 +295,43 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       });
     },
 
+    setPowder(slot, powderIndex, powderId) {
+      set((state) => {
+        pushHistory(state);
+        const powders = ensurePowders(state);
+        if (!powders[slot]) powders[slot] = [];
+        const arr = powders[slot]!;
+        while (arr.length <= powderIndex) arr.push(-1);
+        arr[powderIndex] = powderId;
+      });
+    },
+
+    removePowder(slot, powderIndex) {
+      set((state) => {
+        pushHistory(state);
+        const powders = ensurePowders(state);
+        const arr = powders[slot];
+        if (!arr) return;
+        arr.splice(powderIndex, 1);
+        if (arr.length === 0) delete powders[slot];
+      });
+    },
+
+    clearPowders(slot) {
+      set((state) => {
+        pushHistory(state);
+        const powders = ensurePowders(state);
+        delete powders[slot];
+      });
+    },
+
     equipCraftedItem(slot, info) {
       set((state) => {
         pushHistory(state);
         state.slots[slot] = null;
         state.craftedSlots[slot] = info;
+        const powders = ensurePowders(state);
+        delete powders[slot];
         state.selectedSlot = slot;
       });
     },
@@ -309,6 +376,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
           slots: { ...next.slots, ...(snapshot.slots ?? {}) },
           craftedSlots: { ...next.craftedSlots, ...(snapshot.craftedSlots ?? {}) },
           locks: { ...next.locks, ...(snapshot.locks ?? {}) },
+          powdersBySlot: { ...next.powdersBySlot, ...(snapshot.powdersBySlot ?? {}) },
           binsByCategory: {
             ...next.binsByCategory,
             ...(snapshot.binsByCategory ?? {}),
@@ -325,6 +393,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
       set((state) => {
         pushHistory(state);
         state.slots = { ...slots };
+        state.powdersBySlot = {};
         state.comparePreview = { ...EMPTY_COMPARE };
       });
     },

@@ -1,11 +1,13 @@
 export const THEME_STORAGE_KEY = 'build-solver:theme-mode';
 
-export type ThemeMode = 'minimal' | 'classic';
+export type ThemeMode = 'dark' | 'light';
 
-export const DEFAULT_THEME_MODE: ThemeMode = 'minimal';
+export const DEFAULT_THEME_MODE: ThemeMode = 'dark';
 
 function coerceThemeMode(value: string | null | undefined): ThemeMode {
-  return value === 'classic' ? 'classic' : DEFAULT_THEME_MODE;
+  if (value === 'light') return 'light';
+  if (value === 'daylight' || value === 'minimal') return 'light';
+  return DEFAULT_THEME_MODE;
 }
 
 export function readStoredThemeMode(): ThemeMode {
