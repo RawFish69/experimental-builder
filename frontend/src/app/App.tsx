@@ -610,7 +610,7 @@ export function App() {
           <div className="flex-1" />
 
           {/* Center: How to use + Build Solver */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <a
               className="wb-button px-2 py-1 text-[11px]"
               data-variant="ghost"
@@ -623,11 +623,11 @@ export function App() {
             </a>
             <button
               type="button"
-              className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold text-[var(--wb-accent)] transition-colors hover:bg-[var(--wb-accent-muted)]"
+              className="flex items-center gap-2 rounded-lg border-2 border-[var(--wb-accent)] bg-[var(--wb-accent)] px-4 py-2 text-sm font-bold text-[var(--wb-button-primary-text)] shadow-sm transition-all hover:bg-[var(--wb-accent-hover)] hover:border-[var(--wb-accent-hover)] hover:shadow-md active:scale-95"
               onClick={openAutoBuilder}
               title="Open Build Solver"
             >
-              <Hammer size={16} />
+              <Hammer size={17} />
               <span className="hidden sm:inline">Build Solver</span>
             </button>
           </div>
@@ -686,8 +686,8 @@ export function App() {
               <TreePine size={12} className="mr-1" />
               ATree
             </Button>
-            <Button variant="primary" className="px-2 py-1 text-[11px]" onClick={openRecipeSolver}>
-              Recipe
+            <Button variant="primary" className="px-3 py-1.5 text-xs font-bold shadow-sm hover:shadow-md" onClick={openRecipeSolver}>
+              Recipe Solver
             </Button>
             <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
           </div>

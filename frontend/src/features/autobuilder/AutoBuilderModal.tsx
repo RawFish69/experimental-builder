@@ -1200,11 +1200,11 @@ export function AutoBuilderModal(props: {
                   })}
                   <div>
                     <Button
-                      variant="ghost"
                       onClick={addCustomIdThresholdRow}
                       disabled={numericIdOptions.length === 0}
+                      className="text-[var(--wb-accent)] border-[var(--wb-accent-border)] hover:bg-[var(--wb-accent-muted)]"
                     >
-                      Add ID Threshold
+                      + Add ID Threshold
                     </Button>
                   </div>
                   {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
