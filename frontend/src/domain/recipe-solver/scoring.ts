@@ -41,8 +41,15 @@ function sumMax(stats: CraftedItemStats, keys: readonly string[]): number {
   return total;
 }
 
+const POISON_DAMPENING = 0.03;
+
 export function computeOffenseScore(stats: CraftedItemStats): number {
-  let score = sumPositiveMax(stats, OFFENSE_KEYS);
+  let score = 0;
+  for (const key of OFFENSE_KEYS) {
+    const val = stats.maxRolls[key] ?? 0;
+    if (val <= 0) continue;
+    score += key === 'poison' ? val * POISON_DAMPENING : val;
+  }
   if (stats.category === 'armor') {
     score += stats.hp * 0.02;
   }
@@ -76,6 +83,12 @@ export function computeUtilityScore(stats: CraftedItemStats): number {
 
 export function computeSkillPointScore(stats: CraftedItemStats): number {
   return sumMax(stats, SKILL_POINT_KEYS);
+}
+
+export function computeDurabilityScore(stats: CraftedItemStats): number {
+  const duraHigh = stats.durability[1];
+  const durationHigh = stats.duration[1];
+  return Math.max(0, duraHigh) * 0.15 + Math.max(0, durationHigh) * 0.3;
 }
 
 export function computeReqPenalty(stats: CraftedItemStats): number {
@@ -142,6 +155,7 @@ export function scoreCraftedItem(
   const defense = computeDefenseScore(stats) * weights.defense;
   const utility = computeUtilityScore(stats) * weights.utility;
   const skillPoints = computeSkillPointScore(stats) * weights.skillPoints;
+  const durability = computeDurabilityScore(stats) * weights.durability;
   const reqPenalty = computeReqPenalty(stats) * weights.reqPenalty;
   const thresholdPenalty = computeThresholdPenalty(stats, constraints.target);
 
@@ -150,11 +164,12 @@ export function scoreCraftedItem(
     defense,
     utility,
     skillPoints,
+    durability,
     reqPenalty,
     thresholdPenalty,
   };
 
-  const score = offense + defense + utility + skillPoints - reqPenalty - thresholdPenalty;
+  const score = offense + defense + utility + skillPoints + durability - reqPenalty - thresholdPenalty;
   return { score, breakdown };
 }
 
@@ -172,7 +187,7 @@ export function roughIngredientScore(
   let score = 0;
   for (const [key, range] of Object.entries(ing.ids)) {
     const val = range.max;
-    if (OFFENSE_KEYS.includes(key) && val > 0) score += val * weights.offense;
+    if (OFFENSE_KEYS.includes(key) && val > 0) score += (key === 'poison' ? val * POISON_DAMPENING : val) * weights.offense;
     else if (DEFENSE_KEYS.includes(key) && val > 0) score += val * weights.defense;
     else if (UTILITY_KEYS.includes(key)) {
       if (key === 'mr') score += val * 12 * weights.utility;
@@ -185,6 +200,9 @@ export function roughIngredientScore(
     if (thresholdKeys?.has(key) && val > 0) {
       score += val * 50;
     }
+  }
+  if (ing.itemIDs.dura > 0) {
+    score += ing.itemIDs.dura * 0.15 * weights.durability;
   }
   const reqTotal = Math.max(0, ing.itemIDs.strReq) + Math.max(0, ing.itemIDs.dexReq)
     + Math.max(0, ing.itemIDs.intReq) + Math.max(0, ing.itemIDs.defReq) + Math.max(0, ing.itemIDs.agiReq);

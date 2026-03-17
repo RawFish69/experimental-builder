@@ -44,15 +44,15 @@ function presetWeights(preset: OptimizationPreset): RecipeSolverWeights {
   const base = { ...DEFAULT_RECIPE_SOLVER_WEIGHTS };
   switch (preset) {
     case 'advancedIds':
-      return { offense: 0.25, defense: 0.25, utility: 0.25, skillPoints: 0.25, reqPenalty: 0.25 };
+      return { offense: 0.25, defense: 0.25, utility: 0.25, skillPoints: 0.25, reqPenalty: 0.25, durability: 0.25 };
     case 'offense':
-      return { offense: 2.0, defense: 0, utility: 0, skillPoints: 0, reqPenalty: 0 };
+      return { offense: 2.0, defense: 0, utility: 0, skillPoints: 0, reqPenalty: 0, durability: 0 };
     case 'defense':
-      return { offense: 0, defense: 2.0, utility: 0, skillPoints: 0, reqPenalty: 0 };
+      return { offense: 0, defense: 2.0, utility: 0, skillPoints: 0, reqPenalty: 0, durability: 1.5 };
     case 'utility':
-      return { offense: 0, defense: 0, utility: 2.0, skillPoints: 0, reqPenalty: 0 };
+      return { offense: 0, defense: 0, utility: 2.0, skillPoints: 0, reqPenalty: 0, durability: 0.4 };
     case 'skillpoints':
-      return { offense: 0, defense: 0, utility: 0, skillPoints: 2.0, reqPenalty: 0 };
+      return { offense: 0, defense: 0, utility: 0, skillPoints: 2.0, reqPenalty: 0, durability: 0 };
     case 'balanced':
     default:
       return base;
@@ -671,6 +671,7 @@ function CandidateCard(props: {
           <div className="mt-1 text-xs text-[var(--wb-muted)]">
             Off {Math.round(scoreBreakdown.offense)} | Def {Math.round(scoreBreakdown.defense)}
             {' | '}Util {Math.round(scoreBreakdown.utility)} | SP {Math.round(scoreBreakdown.skillPoints)}
+            {scoreBreakdown.durability > 0 ? ` | Dur ${Math.round(scoreBreakdown.durability)}` : ''}
             {scoreBreakdown.reqPenalty > 0 ? ` | Req -${Math.round(scoreBreakdown.reqPenalty)}` : ''}
           </div>
           <div className="mt-1 text-xs text-[var(--wb-muted)]">

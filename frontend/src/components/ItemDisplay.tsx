@@ -415,8 +415,8 @@ export function ItemCard(props: {
         </div>
       )}
 
-      {/* Top IDs with polarity */}
-      {topIds.length > 0 && (
+      {/* Top IDs with polarity (hidden when detail block is expanded to avoid duplication) */}
+      {!props.showDetails && topIds.length > 0 && (
         <div className="mt-1.5 grid gap-px text-[13px]">
           {topIds.map((id) => (
             <div key={id.key} className="flex items-center justify-between px-1">
@@ -466,7 +466,7 @@ export function ItemCard(props: {
       )}
 
       {/* Expanded detail (shown via showDetails prop) */}
-      {props.showDetails && <ItemDetailBlock item={props.item} powderIds={props.powderIds} />}
+      {props.showDetails && <ItemDetailBlock item={props.item} powderIds={props.powderIds} skipDamageLines />}
 
       {/* Actions */}
       {(props.onPin || props.onEquip || props.onRemove) && (
@@ -498,7 +498,7 @@ function DetailSpacer() {
   return <div className="my-1 h-px bg-[var(--wb-border-muted)]" />;
 }
 
-function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[] }) {
+function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; skipDamageLines?: boolean }) {
   const { item } = props;
   const powderedDmg = props.powderIds ? computePowderedDamages(item, props.powderIds) : null;
   const powderedDef = props.powderIds ? computePowderedDefenses(item, props.powderIds) : null;
@@ -517,8 +517,8 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[] }) 
         </div>
       )}
 
-      {/* Damage lines */}
-      {damages.length > 0 && (
+      {/* Damage lines (skipped when parent already renders them) */}
+      {!props.skipDamageLines && damages.length > 0 && (
         <div className="grid gap-0.5">
           {damages.map((d) => (
             <div
@@ -533,7 +533,7 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[] }) 
         </div>
       )}
 
-      {(damages.length > 0 || atkSpd) && <DetailSpacer />}
+      {((!props.skipDamageLines && damages.length > 0) || atkSpd) && <DetailSpacer />}
 
       {/* Requirements */}
       {reqs.length > 0 && (

@@ -435,11 +435,13 @@ export function AutoBuilderModal(props: {
         weights: attempt.rescueWeights
           ? {
               ...baseConstraints.weights,
-              legacyBaseDps: baseConstraints.weights.legacyBaseDps * 0.6,
-              dpsProxy: baseConstraints.weights.dpsProxy * 0.55,
-              legacyEhp: Math.max(baseConstraints.weights.legacyEhp, 1.0),
-              ehpProxy: Math.max(baseConstraints.weights.ehpProxy, 1.0),
-              sustain: Math.max(baseConstraints.weights.sustain, 0.8),
+              ...((baseConstraints.constraintOnlyMode || (baseConstraints.target.customNumericRanges?.length ?? 0) > 0) ? {} : {
+                legacyBaseDps: baseConstraints.weights.legacyBaseDps * 0.6,
+                dpsProxy: baseConstraints.weights.dpsProxy * 0.55,
+                legacyEhp: Math.max(baseConstraints.weights.legacyEhp, 1.0),
+                ehpProxy: Math.max(baseConstraints.weights.ehpProxy, 1.0),
+                sustain: Math.max(baseConstraints.weights.sustain, 0.8),
+              }),
               skillPointTotal: Math.max(baseConstraints.weights.skillPointTotal, 0.8),
               reqTotalPenalty: Math.max(baseConstraints.weights.reqTotalPenalty, 1.8),
             }
@@ -800,15 +802,15 @@ export function AutoBuilderModal(props: {
         : Math.max(baseConstraints.exhaustiveStateLimit, 1_200_000),
       weights: {
         ...baseConstraints.weights,
-        ...(baseConstraints.constraintOnlyMode ? {} : {
+        ...((baseConstraints.constraintOnlyMode || (baseConstraints.target.customNumericRanges?.length ?? 0) > 0) ? {} : {
           legacyBaseDps: baseConstraints.weights.legacyBaseDps * 0.6,
           dpsProxy: baseConstraints.weights.dpsProxy * 0.55,
           legacyEhp: Math.max(baseConstraints.weights.legacyEhp, 1.0),
           ehpProxy: Math.max(baseConstraints.weights.ehpProxy, 1.0),
           sustain: Math.max(baseConstraints.weights.sustain, 0.8),
-          skillPointTotal: Math.max(baseConstraints.weights.skillPointTotal, 0.8),
-          reqTotalPenalty: Math.max(baseConstraints.weights.reqTotalPenalty, 1.8),
         }),
+        skillPointTotal: Math.max(baseConstraints.weights.skillPointTotal, 0.8),
+        reqTotalPenalty: Math.max(baseConstraints.weights.reqTotalPenalty, 1.8),
       },
     };
 
@@ -1500,9 +1502,9 @@ export function AutoBuilderModal(props: {
                     {shownCandidates.length === 0 && !showNearMisses ? (
                       <div className="space-y-2">
                         {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
-                          <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-4">
-                            <div className="text-sm font-semibold text-amber-200">Setup Required</div>
-                            <div className="mt-1 text-xs text-amber-100/80">
+                          <div className="rounded-xl border border-amber-500/50 bg-amber-500/15 p-4">
+                            <div className="text-sm font-semibold text-amber-700 dark:text-amber-200">Setup Required</div>
+                            <div className="mt-1 text-xs text-amber-800/80 dark:text-amber-100/80">
                               You&apos;re in <b>Advanced IDs only</b> mode. Add at least one Advanced ID threshold (Min or Max) in the left panel before generating.
                             </div>
                           </div>

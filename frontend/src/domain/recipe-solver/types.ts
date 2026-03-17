@@ -90,7 +90,7 @@ export const LEVEL_RANGES = [
   '40-43','43-45','45-47','47-49','50-53','53-55','55-57','57-59',
   '60-63','63-65','65-67','67-69','70-73','73-75','75-77','77-79',
   '80-83','83-85','85-87','87-89','90-93','93-95','95-97','97-99',
-  '100-103','103-105',
+  '100-103','103-105','105-110','110-115','115-120',
 ] as const;
 
 export const CRAFTED_ATK_SPEEDS = ['SLOW', 'NORMAL', 'FAST'] as const;
@@ -131,6 +131,7 @@ export interface RecipeSolverWeights {
   utility: number;
   skillPoints: number;
   reqPenalty: number;
+  durability: number;
 }
 
 export interface RecipeSolverConstraints {
@@ -154,6 +155,7 @@ export interface RecipeSolverScoreBreakdown {
   defense: number;
   utility: number;
   skillPoints: number;
+  durability: number;
   reqPenalty: number;
   thresholdPenalty: number;
 }
@@ -185,6 +187,7 @@ export const DEFAULT_RECIPE_SOLVER_WEIGHTS: RecipeSolverWeights = {
   utility: 0.4,
   skillPoints: 0.3,
   reqPenalty: 0.5,
+  durability: 0.8,
 };
 
 export const DEFAULT_RECIPE_SOLVER_CONSTRAINTS: RecipeSolverConstraints = {

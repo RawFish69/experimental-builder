@@ -700,13 +700,19 @@ export function thresholdBiasedWeights(
   if (typeof target.minSpeed === 'number') w.speed = Math.max(w.speed, DEFAULT_AUTO_BUILDER_WEIGHTS.speed * THRESHOLD_WEIGHT_BOOST);
   if (typeof target.minSkillPointTotal === 'number') w.skillPointTotal = Math.max(w.skillPointTotal, DEFAULT_AUTO_BUILDER_WEIGHTS.skillPointTotal * THRESHOLD_WEIGHT_BOOST);
   if (typeof target.maxReqTotal === 'number') w.reqTotalPenalty = Math.max(w.reqTotalPenalty, DEFAULT_AUTO_BUILDER_WEIGHTS.reqTotalPenalty * THRESHOLD_WEIGHT_BOOST);
+  const SUSTAIN_RELATED_KEYS = new Set(['hprRaw', 'hprPct', 'hprTotal', 'mr', 'ms', 'ls']);
   if ((target.customNumericRanges?.length ?? 0) > 0) {
-    w.sustain = Math.max(w.sustain, DEFAULT_AUTO_BUILDER_WEIGHTS.sustain * THRESHOLD_WEIGHT_BOOST);
+    const hasSustainTarget = target.customNumericRanges!.some(
+      (r) => r.key && SUSTAIN_RELATED_KEYS.has(r.key),
+    );
+    if (hasSustainTarget) {
+      w.sustain = Math.max(w.sustain, DEFAULT_AUTO_BUILDER_WEIGHTS.sustain * THRESHOLD_WEIGHT_BOOST);
+    }
   }
   return w;
 }
 
-const ADVANCED_ID_ROUGH_GENERIC_SCALE = 0.1;
+const ADVANCED_ID_ROUGH_GENERIC_SCALE = 0.02;
 
 function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints): number {
   const customRanges = constraints.target.customNumericRanges ?? [];
@@ -724,11 +730,8 @@ function roughItemScore(item: NormalizedItem, constraints: AutoBuildConstraints)
   if (constraints.constraintOnlyMode) {
     let score = customScore;
     score -= item.roughScoreFields.reqTotal * 0.05;
-    // Baseline: items with low requirements and positive SP bonuses get a small
-    // floor so they're not pruned just because they lack the target stat.
     const spBonus = Math.max(0, item.roughScoreFields.skillPointTotal) * 0.3;
-    const ehpBonus = Math.max(0, item.roughScoreFields.ehpProxy) * 0.02;
-    score += spBonus + ehpBonus;
+    score += spBonus;
     return score;
   }
 

@@ -30,7 +30,7 @@ const MAX_COMPLIANCE_BASELINE = 10;
 /** Penalty per unit of stat above the max target. */
 const MAX_OVERAGE_PENALTY_PER_UNIT = 8;
 export const CUSTOM_RANGE_ROUGH_SCORE_MULTIPLIER = 100;
-const ADVANCED_ID_FINAL_GENERIC_SCALE = 0.25;
+const ADVANCED_ID_FINAL_GENERIC_SCALE = 0.05;
 
 // ---------------------------------------------------------------------------
 // Sustain & threshold helpers (unchanged from original)
