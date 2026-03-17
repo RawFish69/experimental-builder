@@ -818,6 +818,22 @@ a {
   --_cta-color: var(--wb-accent-2);
 }
 
+/* ─── Mobile touch targets & spacing ─── */
+@media (max-width: 767px) {
+  .wb-button,
+  .wb-icon-button,
+  .wb-chip {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  .wb-select,
+  .wb-input {
+    min-height: 36px;
+    font-size: 16px; /* prevents iOS zoom on focus */
+  }
+}
+
 /* ─── Reduced motion ─── */
 @media (prefers-reduced-motion: reduce) {
   * {

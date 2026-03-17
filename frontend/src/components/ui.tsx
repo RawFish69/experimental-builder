@@ -121,11 +121,13 @@ export function Modal(props: PropsWithChildren<{ open: boolean; onOpenChange(ope
         <Dialog.Overlay className="fixed inset-0 z-40 backdrop-blur-sm" style={{ background: 'var(--wb-overlay)' }} />
         <Dialog.Content
           className={cn(
-            'wb-panel fixed left-1/2 top-1/2 z-50 w-[min(95vw,1100px)] -translate-x-1/2 -translate-y-1/2 rounded-lg shadow-2xl',
+            'wb-panel fixed z-50 shadow-2xl',
+            'inset-0 flex flex-col rounded-none',
+            'md:inset-auto md:left-1/2 md:top-1/2 md:w-[min(95vw,1100px)] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-lg',
             props.className,
           )}
         >
-          <div className="flex items-start justify-between gap-3 border-b border-[var(--wb-border-muted)] px-4 py-3">
+          <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--wb-border-muted)] px-4 py-3">
             <div>
               <Dialog.Title className="text-sm font-semibold">{props.title}</Dialog.Title>
               {props.description ? (
@@ -140,8 +142,8 @@ export function Modal(props: PropsWithChildren<{ open: boolean; onOpenChange(ope
               </button>
             </Dialog.Close>
           </div>
-          <div className="max-h-[70vh] overflow-auto px-4 py-3">{props.children}</div>
-          {props.footer ? <div className="border-t border-[var(--wb-border-muted)] px-4 py-3">{props.footer}</div> : null}
+          <div className="min-h-0 flex-1 overflow-auto px-4 py-3 md:max-h-[70vh] md:flex-none">{props.children}</div>
+          {props.footer ? <div className="shrink-0 border-t border-[var(--wb-border-muted)] px-4 py-3">{props.footer}</div> : null}
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

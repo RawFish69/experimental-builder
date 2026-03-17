@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useShallow } from 'zustand/react/shallow';
-import { CirclePlay, FlaskConical, Hammer, Link2, TreePine } from 'lucide-react';
+import { CirclePlay, FlaskConical, Hammer, Link2, Menu, TreePine, X } from 'lucide-react';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode, type ThemeMode } from '@/app/theme-mode';
 import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
@@ -129,9 +129,11 @@ export function App() {
   const [searchTrigger, setSearchTrigger] = useState(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>(() => readStoredThemeMode());
 
-  // Layout state
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [statsPanelCollapsed, setStatsPanelCollapsed] = useState(false);
+  // Layout state — sidebars start collapsed on narrow screens
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(isMobile);
+  const [statsPanelCollapsed, setStatsPanelCollapsed] = useState(isMobile);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const searchClientRef = useRef<SearchWorkerClient | null>(null);
   const searchTimerRef = useRef<number | null>(null);
@@ -580,12 +582,12 @@ export function App() {
   return (
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
       <div className="wb-app-shell flex h-screen flex-col overflow-hidden">
-        {/* ─── TopBar (48px) ─── */}
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-3">
+        {/* ─── TopBar ─── */}
+        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-2 md:gap-2 md:px-3">
           {/* Left section */}
           <SidebarToggle collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} side="left" />
 
-          <div className="wb-theme-toggle">
+          <div className="wb-theme-toggle hidden sm:flex">
             <span className="wb-theme-toggle-label">Theme</span>
             {(['dark', 'light'] as const).map((mode) => (
               <button
@@ -601,7 +603,7 @@ export function App() {
           </div>
 
           {abilityTreeEvaluation && (
-            <span className="wb-chip" data-tone="success">
+            <span className="wb-chip hidden sm:inline-flex" data-tone="success">
               ATree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
             </span>
           )}
@@ -609,10 +611,10 @@ export function App() {
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Center: How to use + Build Solver */}
-          <div className="flex items-center gap-2">
+          {/* Center: Solver CTAs */}
+          <div className="flex items-center gap-1.5 md:gap-2">
             <a
-              className="wb-button px-2 py-1 text-[11px]"
+              className="wb-button hidden px-2 py-1 text-[11px] md:inline-flex"
               data-variant="ghost"
               href={tutorialUrl}
               target="_blank"
@@ -623,22 +625,22 @@ export function App() {
             </a>
             <button
               type="button"
-              className="wb-solver-cta flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-all active:scale-95"
+              className="wb-solver-cta flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 md:gap-2 md:px-5 md:py-2.5 md:text-sm"
               onClick={openAutoBuilder}
               title="Open Build Solver"
               data-tone="build"
             >
-              <Hammer size={18} />
+              <Hammer size={16} className="md:h-[18px] md:w-[18px]" />
               <span className="hidden sm:inline">Build Solver</span>
             </button>
             <button
               type="button"
-              className="wb-solver-cta flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm font-bold transition-all active:scale-95"
+              className="wb-solver-cta flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 md:gap-2 md:px-5 md:py-2.5 md:text-sm"
               onClick={openRecipeSolver}
               title="Open Recipe Solver"
               data-tone="recipe"
             >
-              <FlaskConical size={18} />
+              <FlaskConical size={16} className="md:h-[18px] md:w-[18px]" />
               <span className="hidden sm:inline">Recipe Solver</span>
             </button>
           </div>
@@ -646,8 +648,8 @@ export function App() {
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Right controls */}
-          <div className="flex items-center gap-1.5">
+          {/* Right controls — desktop */}
+          <div className="hidden items-center gap-1.5 md:flex">
             <div className="flex items-center gap-1">
               <label className="text-[11px] text-[var(--wb-text-quaternary)]">Class</label>
               <select
@@ -699,7 +701,98 @@ export function App() {
             </Button>
             <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
           </div>
+
+          {/* Right controls — mobile hamburger */}
+          <button
+            type="button"
+            className="wb-icon-button md:hidden"
+            onClick={() => setMobileMenuOpen((v) => !v)}
+            title="Menu"
+          >
+            {mobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
+          </button>
         </header>
+
+        {/* ─── Mobile dropdown menu ─── */}
+        {mobileMenuOpen && (
+          <div className="flex flex-col gap-2 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-3 py-3 md:hidden">
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1">
+                <label className="text-[11px] text-[var(--wb-text-quaternary)]">Class</label>
+                <select
+                  className="wb-select w-28"
+                  value={snapshot.characterClass ?? ''}
+                  onChange={(e) => store.setCharacterClass((e.target.value || null) as WorkbenchSnapshot['characterClass'])}
+                >
+                  <option value="">Auto</option>
+                  <option value="Warrior">Warrior</option>
+                  <option value="Assassin">Assassin</option>
+                  <option value="Mage">Mage</option>
+                  <option value="Archer">Archer</option>
+                  <option value="Shaman">Shaman</option>
+                </select>
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-[11px] text-[var(--wb-text-quaternary)]">Lv.</label>
+                <input
+                  className="wb-input w-16"
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={snapshot.level}
+                  onChange={(e) => store.setLevel(Number(e.target.value))}
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <label className="text-[11px] text-[var(--wb-text-quaternary)]">Tomes</label>
+                <select
+                  className="wb-select w-32"
+                  value={snapshot.skillpointTomeMode ?? 'no_tomes'}
+                  onChange={(e) => store.setSkillpointTomeMode((e.target.value || 'no_tomes') as WorkbenchSnapshot['skillpointTomeMode'])}
+                >
+                  <option value="no_tomes">None (200)</option>
+                  <option value="guild_rainbow">Guild +1</option>
+                  <option value="flexible_2">+2 Flex</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="wb-theme-toggle sm:hidden">
+                <span className="wb-theme-toggle-label">Theme</span>
+                {(['dark', 'light'] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    className="wb-theme-toggle-button"
+                    data-active={themeMode === mode ? 'true' : 'false'}
+                    onClick={() => setThemeMode(mode)}
+                  >
+                    {mode === 'dark' ? 'Dark' : 'Light'}
+                  </button>
+                ))}
+              </div>
+              <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => void shareWorkbench()}>
+                <Link2 size={12} className="mr-1" />
+                Share
+              </Button>
+              <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={openAbilityTree}>
+                <TreePine size={12} className="mr-1" />
+                ATree
+              </Button>
+              <a
+                className="wb-button px-2 py-1 text-[11px]"
+                data-variant="ghost"
+                href={tutorialUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <CirclePlay size={12} className="mr-1" />
+                How to use
+              </a>
+              <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
+            </div>
+          </div>
+        )}
 
         {/* Status bar */}
         {statusMessage && (
@@ -717,22 +810,29 @@ export function App() {
 
         {/* ─── Content area (3-column) ─── */}
         <div className="flex min-h-0 flex-1">
-          {/* Left Sidebar */}
+          {/* Left Sidebar — overlay on mobile, inline on desktop */}
           {!sidebarCollapsed && (
-            <aside className="flex w-[280px] shrink-0 flex-col border-r border-[var(--wb-surface-border)] bg-[var(--wb-surface)] xl:w-[320px]">
-              <SearchPanel
-                catalog={catalog}
-                state={searchState}
-                setState={setSearchState}
-                result={searchResult}
-                loading={searchLoading}
-                selectedSlot={snapshot.selectedSlot}
-                onPin={handlePinFromSearch}
-                onEquip={handleEquipFromSearch}
-                onHover={() => {}}
-                onSearch={() => setSearchTrigger((t) => t + 1)}
+            <>
+              {/* Backdrop for mobile overlay */}
+              <div
+                className="fixed inset-0 z-20 bg-black/40 md:hidden"
+                onClick={() => setSidebarCollapsed(true)}
               />
-            </aside>
+              <aside className="fixed inset-y-0 left-0 z-30 flex w-[85vw] max-w-[320px] flex-col border-r border-[var(--wb-surface-border)] bg-[var(--wb-surface)] shadow-xl md:static md:z-auto md:w-[280px] md:max-w-none md:shadow-none xl:w-[320px]">
+                <SearchPanel
+                  catalog={catalog}
+                  state={searchState}
+                  setState={setSearchState}
+                  result={searchResult}
+                  loading={searchLoading}
+                  selectedSlot={snapshot.selectedSlot}
+                  onPin={handlePinFromSearch}
+                  onEquip={handleEquipFromSearch}
+                  onHover={() => {}}
+                  onSearch={() => setSearchTrigger((t) => t + 1)}
+                />
+              </aside>
+            </>
           )}
 
           {/* Main panel */}
@@ -763,34 +863,40 @@ export function App() {
             />
           </main>
 
-          {/* Right Stats Panel */}
+          {/* Right Stats Panel — overlay on mobile, inline on desktop */}
           {!statsPanelCollapsed && (
-            <aside className="flex w-[400px] shrink-0 flex-col overflow-hidden border-l border-[var(--wb-surface-border)] bg-[var(--wb-surface)] xl:w-[440px]">
-              <BuildSummaryPanel
-                catalog={catalog}
-                snapshot={snapshot}
-                summary={summary}
-                compareSummary={compareSummary}
-                compareSlot={snapshot.comparePreview.slot}
-                spellPreview={spellPreview}
-                abilityTreeSummary={
-                  abilityTreeEvaluation && abilityTreeClass
-                    ? {
-                        className: abilityTreeClass,
-                        apUsed: abilityTreeEvaluation.apUsed,
-                        apCap: abilityTreeEvaluation.apCap,
-                        selectedCount: abilityTreeEvaluation.activeIds.length,
-                        hasErrors: abilityTreeEvaluation.errors.length > 0 || abilityTreeEvaluation.apUsed > abilityTreeEvaluation.apCap,
-                      }
-                    : null
-                }
-                actions={{
-                  onOpenAbilityTree: openAbilityTree,
-                  onCopyLegacyLink: () => void copyLegacyLink(),
-                  onOpenLegacyBuilder: openLegacyBuilder,
-                }}
+            <>
+              <div
+                className="fixed inset-0 z-20 bg-black/40 md:hidden"
+                onClick={() => setStatsPanelCollapsed(true)}
               />
-            </aside>
+              <aside className="fixed inset-y-0 right-0 z-30 flex w-[85vw] max-w-[440px] flex-col overflow-hidden border-l border-[var(--wb-surface-border)] bg-[var(--wb-surface)] shadow-xl md:static md:z-auto md:w-[400px] md:max-w-none md:shadow-none xl:w-[440px]">
+                <BuildSummaryPanel
+                  catalog={catalog}
+                  snapshot={snapshot}
+                  summary={summary}
+                  compareSummary={compareSummary}
+                  compareSlot={snapshot.comparePreview.slot}
+                  spellPreview={spellPreview}
+                  abilityTreeSummary={
+                    abilityTreeEvaluation && abilityTreeClass
+                      ? {
+                          className: abilityTreeClass,
+                          apUsed: abilityTreeEvaluation.apUsed,
+                          apCap: abilityTreeEvaluation.apCap,
+                          selectedCount: abilityTreeEvaluation.activeIds.length,
+                          hasErrors: abilityTreeEvaluation.errors.length > 0 || abilityTreeEvaluation.apUsed > abilityTreeEvaluation.apCap,
+                        }
+                      : null
+                  }
+                  actions={{
+                    onOpenAbilityTree: openAbilityTree,
+                    onCopyLegacyLink: () => void copyLegacyLink(),
+                    onOpenLegacyBuilder: openLegacyBuilder,
+                  }}
+                />
+              </aside>
+            </>
           )}
         </div>
       </div>

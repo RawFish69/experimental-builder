@@ -214,8 +214,8 @@ export function WorkbenchBoard(props: {
   return (
     <div className="flex flex-col gap-2 p-3">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
+      <div className="flex flex-wrap items-center justify-between gap-1.5">
+        <div className="flex flex-wrap items-center gap-1">
           <span className="text-[13px] font-semibold">Build</span>
           <Button className="px-1.5 py-0.5 text-[10px]" variant="ghost" onClick={() => props.store.undo()}>Undo</Button>
           <Button className="px-1.5 py-0.5 text-[10px]" variant="ghost" onClick={() => props.store.redo()}>Redo</Button>
@@ -228,7 +228,7 @@ export function WorkbenchBoard(props: {
           </Button>
           <Button className="px-1.5 py-0.5 text-[10px]" variant="ghost" onClick={() => props.store.clearAll()}>Clear</Button>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           <Button variant="ghost" className="px-1.5 py-0.5 text-[10px]" onClick={props.onShareWorkbench}>
             <Link2 size={10} className="mr-0.5" /> Share
           </Button>
@@ -244,8 +244,8 @@ export function WorkbenchBoard(props: {
         </div>
       </div>
 
-      {/* Equipment grid: 3 columns (armor | accessories | weapon+focus) */}
-      <div className="grid gap-1.5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
+      {/* Equipment grid: 1 col on mobile, 2 on md, 3 on xl */}
+      <div className="grid gap-1.5 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.1fr)]">
         {slotGroups.map((group, idx) => (
           <div key={idx} className="grid gap-1.5">
             {group.map((slot) => (
