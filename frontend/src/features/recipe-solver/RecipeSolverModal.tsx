@@ -315,7 +315,7 @@ export function RecipeSolverModal(props: {
       }
     >
       {catalogError ? (
-        <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/5 p-3 text-sm text-rose-200">
+        <div className="mb-4 rounded-xl border border-rose-400/30 bg-rose-400/5 p-3 text-sm text-rose-700 dark:text-rose-200">
           {catalogError}
         </div>
       ) : null}
@@ -323,7 +323,7 @@ export function RecipeSolverModal(props: {
       {running && progressEvent ? (
         <div className="mb-4 rounded-xl border border-sky-400/30 bg-sky-400/5 p-3">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-md bg-sky-400/20 px-2 py-0.5 text-xs font-medium text-sky-100">
+            <span className="rounded-md bg-sky-400/20 px-2 py-0.5 text-xs font-medium text-sky-700 dark:text-sky-100">
               {progressEvent.phase}
             </span>
             {progressEvent.totalSlots > 0 ? (
@@ -598,7 +598,7 @@ export function RecipeSolverModal(props: {
             </div>
 
             {error ? (
-              <div className="mt-2 rounded-xl border border-rose-400/30 bg-rose-400/8 p-2 text-xs text-rose-100">
+              <div className="mt-2 rounded-xl border border-rose-400/30 bg-rose-400/8 p-2 text-xs text-rose-700 dark:text-rose-100">
                 {error}
               </div>
             ) : null}

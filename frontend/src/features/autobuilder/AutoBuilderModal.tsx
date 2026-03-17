@@ -954,32 +954,32 @@ export function AutoBuilderModal(props: {
               </div>
               <div className="flex flex-wrap gap-2">
                 {rejectStats.spInvalid > 0 ? (
-                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-200" title="Skill point / equip feasibility">
+                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-700 dark:text-rose-200" title="Skill point / equip feasibility">
                     SP: {rejectStats.spInvalid}
                   </span>
                 ) : null}
                 {rejectStats.majorIds > 0 ? (
-                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200" title="Major ID requirement">
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-200" title="Major ID requirement">
                     Major ID: {rejectStats.majorIds}
                   </span>
                 ) : null}
                 {rejectStats.duplicate > 0 ? (
-                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200" title="Duplicate build">
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-200" title="Duplicate build">
                     Dup: {rejectStats.duplicate}
                   </span>
                 ) : null}
                 {rejectStats.speed > 0 ? (
-                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-200" title="Attack speed">
+                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-700 dark:text-orange-200" title="Attack speed">
                     Speed: {rejectStats.speed}
                   </span>
                 ) : null}
                 {rejectStats.thresholds > 0 ? (
-                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200" title="Min/max thresholds">
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-200" title="Min/max thresholds">
                     Thresholds: {rejectStats.thresholds}
                   </span>
                 ) : null}
                 {rejectStats.item > 0 ? (
-                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200" title="Item constraint">
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-200" title="Item constraint">
                     Item: {rejectStats.item}
                   </span>
                 ) : null}
@@ -992,37 +992,37 @@ export function AutoBuilderModal(props: {
         <div className="mb-4 rounded-xl border border-amber-400/30 bg-amber-400/8 p-3">
           {lastRejectStats && totalRejected > 0 ? (
             <div className="mb-3">
-              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-amber-200/80">
+              <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-amber-700/80 dark:text-amber-200/80">
                 Last pass reject breakdown
               </div>
               <div className="flex flex-wrap gap-2">
                 {lastRejectStats.spInvalid > 0 ? (
-                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-200">
+                  <span className="rounded bg-rose-400/20 px-1.5 py-0.5 text-[11px] text-rose-700 dark:text-rose-200">
                     SP: {lastRejectStats.spInvalid}
                   </span>
                 ) : null}
                 {lastRejectStats.majorIds > 0 ? (
-                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200">
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-200">
                     Major ID: {lastRejectStats.majorIds}
                   </span>
                 ) : null}
                 {lastRejectStats.duplicate > 0 ? (
-                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200">
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-200">
                     Dup: {lastRejectStats.duplicate}
                   </span>
                 ) : null}
                 {lastRejectStats.speed > 0 ? (
-                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-200">
+                  <span className="rounded bg-orange-400/20 px-1.5 py-0.5 text-[11px] text-orange-700 dark:text-orange-200">
                     Speed: {lastRejectStats.speed}
                   </span>
                 ) : null}
                 {lastRejectStats.thresholds > 0 ? (
-                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-200">
+                  <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-200">
                     Thresholds: {lastRejectStats.thresholds}
                   </span>
                 ) : null}
                 {lastRejectStats.item > 0 ? (
-                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-200">
+                  <span className="rounded bg-slate-400/20 px-1.5 py-0.5 text-[11px] text-slate-600 dark:text-slate-200">
                     Item: {lastRejectStats.item}
                   </span>
                 ) : null}
@@ -1031,7 +1031,7 @@ export function AutoBuilderModal(props: {
           ) : null}
           {retryAvailable ? (
             <div>
-              <div className="mb-2 text-xs text-amber-100">
+              <div className="mb-2 text-xs text-amber-700 dark:text-amber-100">
                 Fast pass found 0 results. Retry with a higher search budget?
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1208,7 +1208,7 @@ export function AutoBuilderModal(props: {
                     </Button>
                   </div>
                   {primaryPreset === 'constraints' && !hasAdvancedIdThresholds ? (
-                    <div className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-[11px] font-medium text-amber-50">
+                    <div className="mt-1 rounded-lg border border-amber-500/50 bg-amber-500/15 p-2 text-[11px] font-medium text-amber-800 dark:text-amber-100">
                       You must add at least one Advanced ID threshold (Min or Max) before generating.
                       The Constraints goal requires explicit ID targets to optimize against.
                     </div>
@@ -1571,11 +1571,11 @@ export function AutoBuilderModal(props: {
 
                     {showNearMisses ? (
                       <>
-                        <div className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3">
-                          <div className="text-sm font-semibold text-amber-200">
+                        <div className="rounded-xl border border-amber-500/50 bg-amber-500/15 p-3">
+                          <div className="text-sm font-semibold text-amber-700 dark:text-amber-200">
                             No exact candidates found — {nearMissCandidates.length} near-miss build{nearMissCandidates.length > 1 ? 's' : ''} detected
                           </div>
-                          <div className="mt-1 text-xs text-amber-100/80">
+                          <div className="mt-1 text-xs text-amber-800/80 dark:text-amber-100/80">
                             These builds came close but missed one or more constraints by a small margin. Builds that only need a few extra skill points may be fixable with tomes.
                           </div>
                         </div>
@@ -1586,10 +1586,10 @@ export function AutoBuilderModal(props: {
                           >
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <div className="text-sm font-semibold text-amber-200">
+                                <div className="text-sm font-semibold text-amber-700 dark:text-amber-200">
                                   Near-miss #{index + 1} | Score {Math.max(0, Math.round(candidate.score)).toLocaleString()}
                                 </div>
-                                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-100/70">
+                                <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-700/70 dark:text-amber-100/70">
                                   <span>HP {Math.round(candidate.summary.aggregated.hpTotal)}</span>
                                   <span>Req {candidate.summary.derived.reqTotal}</span>
                                   <span>MR {candidate.summary.aggregated.mr}</span>
@@ -1598,12 +1598,12 @@ export function AutoBuilderModal(props: {
                                 <CandidateSkillPoints
                                   sp={candidate.summary.aggregated.skillPoints}
                                   assigned={candidate.summary.derived.assignedSkillPointsRequired}
-                                  textClass="text-amber-100/70"
+                                  textClass="text-amber-700/70 dark:text-amber-100/70"
                                 />
                                 {candidate.nearMissReasons?.length ? (
                                   <div className="mt-2 space-y-0.5">
                                     {candidate.nearMissReasons.map((reason, ri) => (
-                                      <div key={ri} className="text-[11px] text-amber-300/90">
+                                      <div key={ri} className="text-[11px] text-amber-700/90 dark:text-amber-300/90">
                                         {reason}
                                       </div>
                                     ))}
@@ -1612,7 +1612,7 @@ export function AutoBuilderModal(props: {
                               </div>
                               <Button
                                 variant="ghost"
-                                className="border border-amber-400/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-400/10"
+                                className="border border-amber-400/30 px-2 py-1 text-xs text-amber-700 dark:text-amber-200 hover:bg-amber-400/10"
                                 onClick={() => props.onLoadCandidate(candidate)}
                               >
                                 Load anyway
@@ -1621,8 +1621,8 @@ export function AutoBuilderModal(props: {
                             <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
                               {ITEM_SLOTS.map((slot) => (
                                 <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-[var(--wb-layer-1)] px-2 py-1">
-                                  <div className="text-[10px] uppercase tracking-wide text-amber-200/60">{slot}</div>
-                                  <div className="truncate text-amber-100/80">
+                                  <div className="text-[10px] uppercase tracking-wide text-amber-700/60 dark:text-amber-200/60">{slot}</div>
+                                  <div className="truncate text-amber-800/80 dark:text-amber-100/80">
                                     {candidate.slots[slot] != null
                                       ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
                                       : 'Empty'}
@@ -1640,17 +1640,17 @@ export function AutoBuilderModal(props: {
                         <div className="mt-3 rounded-xl border border-amber-400/40 bg-amber-400/5 p-3">
                           <div className="flex items-center justify-between gap-2">
                             <div>
-                              <div className="text-sm font-semibold text-amber-200">
+                              <div className="text-sm font-semibold text-amber-700 dark:text-amber-200">
                                 Also found {looserCandidates.length} more build{looserCandidates.length > 1 ? 's' : ''} that break constraints
                               </div>
-                              <div className="mt-1 text-xs text-amber-100/80">
+                              <div className="mt-1 text-xs text-amber-800/80 dark:text-amber-100/80">
                                 These are farther from your targets (SP or thresholds) but might still be interesting. Expand below to inspect them manually.
                               </div>
                             </div>
                           </div>
                         </div>
                         <details className="rounded-xl border border-amber-400/30 bg-amber-900/10 p-3">
-                          <summary className="cursor-pointer list-none text-xs font-semibold text-amber-200">
+                          <summary className="cursor-pointer list-none text-xs font-semibold text-amber-700 dark:text-amber-200">
                             Show looser candidates (advanced)
                           </summary>
                           <div className="mt-2 space-y-2">
@@ -1661,10 +1661,10 @@ export function AutoBuilderModal(props: {
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div>
-                                    <div className="text-sm font-semibold text-amber-200">
+                                    <div className="text-sm font-semibold text-amber-700 dark:text-amber-200">
                                       Loose #{index + 1} | Score {Math.max(0, Math.round(candidate.score)).toLocaleString()}
                                     </div>
-                                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-100/70">
+                                    <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-amber-700/70 dark:text-amber-100/70">
                                       <span>HP {Math.round(candidate.summary.aggregated.hpTotal)}</span>
                                       <span>Req {candidate.summary.derived.reqTotal}</span>
                                       <span>MR {candidate.summary.aggregated.mr}</span>
@@ -1673,12 +1673,12 @@ export function AutoBuilderModal(props: {
                                     <CandidateSkillPoints
                                       sp={candidate.summary.aggregated.skillPoints}
                                       assigned={candidate.summary.derived.assignedSkillPointsRequired}
-                                      textClass="text-amber-100/70"
+                                      textClass="text-amber-700/70 dark:text-amber-100/70"
                                     />
                                     {candidate.nearMissReasons?.length ? (
                                       <div className="mt-2 space-y-0.5">
                                         {candidate.nearMissReasons.map((reason, ri) => (
-                                          <div key={ri} className="text-[11px] text-amber-300/90">
+                                          <div key={ri} className="text-[11px] text-amber-700/90 dark:text-amber-300/90">
                                             {reason}
                                           </div>
                                         ))}
@@ -1687,7 +1687,7 @@ export function AutoBuilderModal(props: {
                                   </div>
                                   <Button
                                     variant="ghost"
-                                    className="border border-amber-400/30 px-2 py-1 text-xs text-amber-200 hover:bg-amber-400/10"
+                                    className="border border-amber-400/30 px-2 py-1 text-xs text-amber-700 dark:text-amber-200 hover:bg-amber-400/10"
                                     onClick={() => props.onLoadCandidate(candidate)}
                                   >
                                     Load anyway
@@ -1696,8 +1696,8 @@ export function AutoBuilderModal(props: {
                                 <div className="mt-2 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2 xl:grid-cols-3">
                                   {ITEM_SLOTS.map((slot) => (
                                     <div key={slot} className="min-w-0 rounded-md border border-amber-400/20 bg-[var(--wb-layer-1)] px-2 py-1">
-                                      <div className="text-[10px] uppercase tracking-wide text-amber-200/60">{slot}</div>
-                                      <div className="truncate text-amber-100/80">
+                                      <div className="text-[10px] uppercase tracking-wide text-amber-700/60 dark:text-amber-200/60">{slot}</div>
+                                      <div className="truncate text-amber-800/80 dark:text-amber-100/80">
                                         {candidate.slots[slot] != null
                                           ? props.catalog?.itemsById.get(candidate.slots[slot]!)?.displayName ?? candidate.slots[slot]
                                           : 'Empty'}
@@ -1720,8 +1720,8 @@ export function AutoBuilderModal(props: {
                 open={statusIsError}
                 className={`mt-2 rounded-xl border p-2 ${
                   statusIsError
-                    ? 'border-rose-400/30 bg-rose-400/10 text-rose-100'
-                    : 'border-sky-400/20 bg-sky-400/5 text-sky-100'
+                    ? 'border-rose-400/30 bg-rose-400/10 text-rose-800 dark:text-rose-100'
+                    : 'border-sky-400/20 bg-sky-400/5 text-sky-700 dark:text-sky-100'
                 }`}
               >
                 <summary className="cursor-pointer list-none text-xs font-medium">
