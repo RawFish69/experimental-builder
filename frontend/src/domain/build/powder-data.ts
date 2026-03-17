@@ -171,7 +171,7 @@ export function applyWeaponPowders(
     damages[elemIdx + 1][1] += info.max;
   }
 
-  damages[0] = neutralRemaining;
+  damages[0] = [neutralRemaining[0], neutralRemaining[1]];
 
   return {
     neutral: { min: Math.round(damages[0][0]), max: Math.round(damages[0][1]) },

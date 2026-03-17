@@ -76,7 +76,7 @@ function chooseEquipSlotForItem(
   return empty ?? candidates[0] ?? null;
 }
 
-function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' | 'binsByCategory' | 'locks' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash' | 'skillpointTomeMode'>): WorkbenchSnapshot {
+function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' | 'binsByCategory' | 'locks' | 'powdersBySlot' | 'level' | 'characterClass' | 'selectedSlot' | 'comparePreview' | 'legacyHash' | 'skillpointTomeMode'>): WorkbenchSnapshot {
   return {
     slots: { ...store.slots },
     craftedSlots: { ...store.craftedSlots },
@@ -91,6 +91,7 @@ function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' 
       weapon: [...store.binsByCategory.weapon],
     },
     locks: { ...store.locks },
+    powdersBySlot: store.powdersBySlot ?? {},
     level: store.level,
     characterClass: store.characterClass,
     selectedSlot: store.selectedSlot,
