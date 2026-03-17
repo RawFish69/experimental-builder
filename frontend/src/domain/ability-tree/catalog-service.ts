@@ -1,7 +1,7 @@
 import { normalizeAbilityTreeDataset } from '@/domain/ability-tree/logic';
 import type { AbilityTreeDataRaw, AbilityTreeDataset } from '@/domain/ability-tree/types';
 
-const LATEST_ATREE_VERSION = '2.1.6.0';
+const LATEST_ATREE_VERSION = '2.2.0.12';
 
 function isLikelyVersion(value: string | null | undefined): value is string {
   return typeof value === 'string' && /^\d+\.\d+\.\d+\.\d+$/.test(value);

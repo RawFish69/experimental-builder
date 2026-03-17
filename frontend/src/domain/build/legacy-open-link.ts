@@ -15,7 +15,7 @@ export function getLegacyBuilderUrl(hash?: string | null): string {
 
   // In local dev, there is no bundled legacy site – open the upstream Wynnbuilder instead.
   if (isDev) {
-    const base = 'https://hppeng-wynn.github.io/builder/';
+    const base = 'https://wynnbuilder-beta.github.io/builder/';
     return clean ? `${base}#${clean}` : base;
   }
 

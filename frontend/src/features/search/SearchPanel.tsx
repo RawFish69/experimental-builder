@@ -437,7 +437,7 @@ export function SearchPanel(props: {
               className="wb-input"
               type="number"
               min={1}
-              max={106}
+              max={120}
               value={props.state.onlyWearableAtLevel ?? ''}
               onChange={(e) => {
                 const v = e.target.value.trim();

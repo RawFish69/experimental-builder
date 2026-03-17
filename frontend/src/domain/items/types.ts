@@ -129,6 +129,12 @@ export interface FacetsMeta {
 export interface CatalogSetMeta {
   /** 1-based piece counts that are illegal for this set (from legacy `bonuses[count-1].illegal`). */
   illegalCounts: number[];
+  /**
+   * Stat bonuses by piece count. Index 0 = 1 piece equipped, index 1 = 2 pieces, etc.
+   * Each entry maps stat keys (e.g. `hprPct`, `spd`, `mr`) to their bonus values.
+   * Empty object `{}` means no bonus at that tier.
+   */
+  bonuses: Array<Record<string, number>>;
 }
 
 export interface CatalogSnapshot {

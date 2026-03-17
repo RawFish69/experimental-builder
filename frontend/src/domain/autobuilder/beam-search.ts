@@ -562,6 +562,28 @@ function summarySatisfiesTargetThresholds(
     failedChecks.push(`maxReqTotal (${summary.derived.reqTotal} > ${target.maxReqTotal})`);
   }
   if (nonAttackCustomSpecs.length > 0 && slots && catalog) {
+    // Pre-compute set bonus contributions for custom range checks.
+    const setBonusContrib: Record<string, number> = {};
+    const setCounts = new Map<string, number>();
+    for (const slot of ITEM_SLOTS) {
+      const sid = slots[slot];
+      if (sid == null) continue;
+      const sn = catalog.itemSetName.get(sid);
+      if (sn) setCounts.set(sn, (setCounts.get(sn) ?? 0) + 1);
+    }
+    for (const [sn, cnt] of setCounts) {
+      const meta = catalog.setsMeta.get(sn);
+      if (!meta || cnt < 1 || cnt > meta.bonuses.length) continue;
+      const bonus = meta.bonuses[cnt - 1];
+      if (bonus) {
+        for (const [bk, bv] of Object.entries(bonus)) {
+          if (typeof bv === 'number' && Number.isFinite(bv)) {
+            setBonusContrib[bk] = (setBonusContrib[bk] ?? 0) + bv;
+          }
+        }
+      }
+    }
+
     for (const range of nonAttackCustomSpecs) {
       const key = range.key;
       let total = 0;
@@ -572,6 +594,7 @@ function summarySatisfiesTargetThresholds(
         if (!item) continue;
         total += item.numericIndex[key] ?? 0;
       }
+      total += setBonusContrib[key] ?? 0;
       if (typeof range.min === 'number' && total < range.min) {
         failedChecks.push(`${key} (${total} < ${range.min})`);
       }

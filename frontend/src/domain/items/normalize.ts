@@ -54,7 +54,7 @@ const NUMERIC_INDEX_KEYS = [
 
 // Rolled ID keys whose values in compress.json are base rolls and should be
 // converted to max-rolls using WynnBuilder's expandItem logic.
-// See hppeng-wynn.github.io/js/build_utils.js (rolledIDs / expandItem).
+// See wynnbuilder-beta.github.io/js/build_utils.js (rolledIDs / expandItem).
 const ROLLED_NUMERIC_FIELDS: ReadonlyArray<{ numericKey: keyof ItemNumericStats; indexKey: string }> = [
   { numericKey: 'hpBonus', indexKey: 'hpBonus' },
   { numericKey: 'hprRaw', indexKey: 'hprRaw' },
@@ -69,11 +69,6 @@ const ROLLED_NUMERIC_FIELDS: ReadonlyArray<{ numericKey: keyof ItemNumericStats;
   { numericKey: 'poison', indexKey: 'poison' },
   { numericKey: 'spd', indexKey: 'spd' },
   { numericKey: 'atkTier', indexKey: 'atkTier' },
-  { numericKey: 'spStr', indexKey: 'str' },
-  { numericKey: 'spDex', indexKey: 'dex' },
-  { numericKey: 'spInt', indexKey: 'int' },
-  { numericKey: 'spDef', indexKey: 'def' },
-  { numericKey: 'spAgi', indexKey: 'agi' },
   { numericKey: 'eDamPct', indexKey: 'eDamPct' },
   { numericKey: 'tDamPct', indexKey: 'tDamPct' },
   { numericKey: 'wDamPct', indexKey: 'wDamPct' },
@@ -220,6 +215,26 @@ function buildNumericIndex(raw: Record<string, unknown>): Record<string, number>
   return result;
 }
 
+function recomputeDerivedNumericIndex(r: Record<string, number>): void {
+  r.skillPointTotal = r.str + r.dex + r.int + r.def + r.agi;
+  r.offenseScore =
+    r.averageDps +
+    r.sdPct * 1.4 +
+    r.mdPct * 1.15 +
+    r.sdRaw * 0.12 +
+    r.mdRaw * 0.12 +
+    (r.damPct + r.rDamPct + r.nDamPct) * 0.8 +
+    (r.eDamPct + r.tDamPct + r.wDamPct + r.fDamPct + r.aDamPct) * 0.5 +
+    r.atkTier * 7 +
+    r.poison * 0.03;
+  r.ehpProxy =
+    (r.hp + r.hpBonus) +
+    (r.eDef + r.tDef + r.wDef + r.fDef + r.aDef) * 0.45 +
+    r.hprRaw * 1.2 +
+    r.hprPct * 2.5;
+  r.utilityScore = r.spd * 1.8 + r.mr * 8 + r.ms * 7 + r.ls * 6;
+}
+
 export function normalizeItem(raw: Record<string, unknown>): NormalizedItem | null {
   if (typeof raw.remapID !== 'undefined') return null;
   const type = asString(raw.type).toLowerCase();
@@ -249,6 +264,8 @@ export function normalizeItem(raw: Record<string, unknown>): NormalizedItem | nu
         numericIndex[indexKey] = max;
       }
     }
+    // Recompute derived fields that depend on rolled stats.
+    recomputeDerivedNumericIndex(numericIndex);
   }
 
   const roughScoreFields = {
@@ -346,22 +363,31 @@ export function normalizeCatalog(payload: RawCompressPayload): CatalogSnapshot {
     }
   }
 
-  // Normalize legacy set metadata (for illegal-combination rules).
+  // Normalize legacy set metadata: illegal-combination rules and stat bonuses.
   // Items carry no `set` field themselves — membership is defined on the set side via item names.
   const rawSets = payload.sets ?? {};
   const itemSetName = new Map<string, string>(); // item displayName (lower) → set name (interim)
   for (const [setName, raw] of Object.entries(rawSets)) {
-    const bonuses = (raw as any)?.bonuses;
-    if (!Array.isArray(bonuses)) continue;
+    const rawBonuses = (raw as any)?.bonuses;
+    if (!Array.isArray(rawBonuses)) continue;
     const illegalCounts: number[] = [];
-    bonuses.forEach((bonus, index) => {
-      if (bonus && typeof bonus === 'object' && (bonus as any).illegal) {
+    const parsedBonuses: Array<Record<string, number>> = [];
+    rawBonuses.forEach((bonus: any, index: number) => {
+      if (bonus && typeof bonus === 'object' && bonus.illegal) {
         illegalCounts.push(index + 1); // bonuses[count-1]
       }
+      const statBonus: Record<string, number> = {};
+      if (bonus && typeof bonus === 'object') {
+        for (const [key, val] of Object.entries(bonus)) {
+          if (key === 'illegal') continue;
+          if (typeof val === 'number' && Number.isFinite(val)) {
+            statBonus[key] = val;
+          }
+        }
+      }
+      parsedBonuses.push(statBonus);
     });
-    if (illegalCounts.length > 0) {
-      setsMeta.set(setName, { illegalCounts });
-    }
+    setsMeta.set(setName, { illegalCounts, bonuses: parsedBonuses });
     // Register every member item name regardless of whether the set is illegal,
     // so we can resolve set membership for all items.
     const members = (raw as any)?.items;

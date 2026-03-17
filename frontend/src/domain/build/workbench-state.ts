@@ -27,7 +27,7 @@ export function createInitialWorkbenchSnapshot(): WorkbenchSnapshot {
     craftedSlots: {},
     binsByCategory: createEmptyBins(),
     locks: createEmptyLocks(),
-    level: 106,
+    level: 120,
     characterClass: null,
     selectedSlot: 'weapon',
     comparePreview: { ...EMPTY_COMPARE },
@@ -125,7 +125,7 @@ export const useWorkbenchStore = create<WorkbenchStore>()(
     setLevel(level) {
       set((state) => {
         pushHistory(state);
-        state.level = Math.min(106, Math.max(1, Math.round(level)));
+        state.level = Math.min(120, Math.max(1, Math.round(level)));
       });
     },
 

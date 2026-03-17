@@ -19,7 +19,7 @@ const wbUrlSnapshotSchema = z.object({
   slots: z.record(z.string(), z.number().int().nullable()).optional(),
   binsByCategory: z.record(z.string(), z.array(z.number().int())).optional(),
   locks: z.record(z.string(), z.boolean()).optional(),
-  level: z.number().int().min(1).max(106).optional(),
+  level: z.number().int().min(1).max(120).optional(),
   characterClass: z.enum(['Warrior', 'Assassin', 'Mage', 'Archer', 'Shaman']).nullable().optional(),
   selectedSlot: z.string().nullable().optional(),
   legacyHash: z.string().nullable().optional(),

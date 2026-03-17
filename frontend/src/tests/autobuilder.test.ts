@@ -53,12 +53,12 @@ describe('autobuilder beam search', () => {
   it('returns deterministic top candidates for a fixed dataset', () => {
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
 
     const constraints = {
       ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
       characterClass: 'Mage' as const,
-      level: 106,
+      level: 120,
       topN: 5,
       topKPerSlot: 10,
       beamWidth: 120,
@@ -123,12 +123,12 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
 
     const constraints = {
       ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
       characterClass: 'Mage' as const,
-      level: 106,
+      level: 120,
       mustIncludeIds: [1729],
       topN: 5,
       topKPerSlot: 12,
@@ -204,7 +204,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Archer';
-    base.level = 106;
+    base.level = 120;
     base.slots.chestplate = 103;
     base.slots.boots = 106;
     base.slots.weapon = 140;
@@ -218,7 +218,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Archer' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 6,
         beamWidth: 60,
@@ -292,7 +292,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Archer';
-    base.level = 106;
+    base.level = 120;
     base.slots.chestplate = 203;
     base.slots.boots = 206;
     base.slots.weapon = 240;
@@ -306,7 +306,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Archer' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 6,
         beamWidth: 60,
@@ -340,7 +340,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
 
     const results = runAutoBuildBeamSearch({
       catalog: thresholdCatalog,
@@ -348,7 +348,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 10,
         topKPerSlot: 20,
         beamWidth: 200,
@@ -379,7 +379,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 10;
     base.locks.weapon = true;
 
@@ -389,7 +389,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 120,
@@ -423,7 +423,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 10;
     base.locks.weapon = true;
 
@@ -433,7 +433,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 200,
@@ -452,7 +452,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 200,
@@ -480,7 +480,7 @@ describe('autobuilder beam search', () => {
     const constraints = {
       ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
       characterClass: 'Mage' as const,
-      level: 106,
+      level: 120,
       target: {
         customNumericRanges: [{ key: 'mr', min: 10 }],
       },
@@ -498,7 +498,7 @@ describe('autobuilder beam search', () => {
         necklace: 9,
         weapon: 10,
       },
-      level: 106,
+      level: 120,
       characterClass: 'Mage',
     }, rankingCatalog);
     const overcapSummary = evaluateBuild({
@@ -513,7 +513,7 @@ describe('autobuilder beam search', () => {
         necklace: 9,
         weapon: 10,
       },
-      level: 106,
+      level: 120,
       characterClass: 'Mage',
     }, rankingCatalog);
 
@@ -541,7 +541,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 10;
     base.locks.weapon = true;
 
@@ -551,7 +551,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 200,
@@ -614,7 +614,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 1008;
     base.slots.chestplate = 1001;
     base.slots.leggings = 1002;
@@ -630,7 +630,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 12,
         beamWidth: 1,
@@ -674,7 +674,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 9;
     base.locks.weapon = true;
 
@@ -684,7 +684,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 10,
         topKPerSlot: 20,
         beamWidth: 200,
@@ -743,7 +743,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 408;
     base.slots.chestplate = 401;
     base.slots.leggings = 402;
@@ -759,7 +759,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 40,
         beamWidth: 20,
@@ -806,7 +806,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 510;
     base.slots.chestplate = 504;
     base.slots.leggings = 505;
@@ -821,7 +821,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 1,
@@ -859,7 +859,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
 
     const noTomesProgress: Array<{ phase: string; reasonCode?: string }> = [];
     const noTomesResults = runAutoBuildBeamSearch({
@@ -868,7 +868,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         mustIncludeIds: [601],
         topN: 5,
         topKPerSlot: 20,
@@ -885,7 +885,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         mustIncludeIds: [601],
         topN: 5,
         topKPerSlot: 20,
@@ -918,7 +918,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         mustIncludeIds: [611],
         topN: 5,
         topKPerSlot: 20,
@@ -953,7 +953,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
     base.slots.weapon = 709;
     base.locks.weapon = true;
 
@@ -963,7 +963,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 120,
@@ -984,7 +984,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         topN: 5,
         topKPerSlot: 20,
         beamWidth: 120,
@@ -1035,7 +1035,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Warrior';
-    base.level = 106;
+    base.level = 120;
 
     const results = runAutoBuildBeamSearch({
       catalog: scenarioCatalog,
@@ -1043,7 +1043,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Warrior' as const,
-        level: 106,
+        level: 120,
         topN: 10,
         topKPerSlot: 40,
         beamWidth: 300,
@@ -1087,7 +1087,7 @@ describe('autobuilder beam search', () => {
 
     const base = createInitialWorkbenchSnapshot();
     base.characterClass = 'Mage';
-    base.level = 106;
+    base.level = 120;
 
     const events: Array<{ phase: string; reasonCode?: string; detail?: string }> = [];
     const results = runAutoBuildBeamSearch({
@@ -1096,7 +1096,7 @@ describe('autobuilder beam search', () => {
       constraints: {
         ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
         characterClass: 'Mage' as const,
-        level: 106,
+        level: 120,
         mustIncludeIds: [901, 902],
       },
       onProgress: (event) => events.push({ phase: event.phase, reasonCode: event.reasonCode, detail: event.detail }),

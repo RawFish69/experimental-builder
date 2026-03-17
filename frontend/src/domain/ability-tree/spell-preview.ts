@@ -253,7 +253,7 @@ function skillPointsToPercentage(skp: number): number {
 }
 
 function levelToBaseHp(level: number): number {
-  const clamped = Math.max(1, Math.min(106, Math.round(level || 1)));
+  const clamped = Math.max(1, Math.min(120, Math.round(level || 1)));
   return clamped * 5 + 5;
 }
 

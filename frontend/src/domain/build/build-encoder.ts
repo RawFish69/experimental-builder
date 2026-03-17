@@ -20,7 +20,7 @@ const B64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-';
 
 const VECTOR_FLAG = 0xC;   // 6 bits — forces first char > 11
 const VERSION_BITLEN = 10;
-const WYNN_VERSION_LATEST = 23; // index for '2.1.6.0'
+const WYNN_VERSION_LATEST = 26; // index for '2.2.0.12' in wynn_version_names (27 entries, 0-based)
 
 const EQUIPMENT_KIND_NORMAL = 0;
 const EQUIPMENT_KIND_BITLEN = 2;
@@ -114,12 +114,12 @@ export function encodeBuildHash(
   w.append(1, 1);
 
   // --- Level ---
-  const level = snapshot.level ?? 106;
-  if (level === 106) {
-    w.append(0, 1); // MAX flag
+  const level = snapshot.level ?? 120;
+  if (level === 121) {
+    w.append(0, 1); // MAX flag (matches beta encoding_consts MAX_LEVEL=121)
   } else {
     w.append(1, 1); // OTHER flag
-    w.append(Math.max(0, Math.min(106, level)), 7);
+    w.append(Math.max(0, Math.min(121, level)), 7);
   }
 
   // --- Aspects (NO_ASPECTS) ---
@@ -134,5 +134,5 @@ export function encodeBuildHash(
  * Build a full WynnBuilder URL for the given hash.
  */
 export function getWynnBuilderBuildUrl(hash: string): string {
-  return `https://hppeng-wynn.github.io/builder/#${hash}`;
+  return `https://wynnbuilder-beta.github.io/builder/#${hash}`;
 }

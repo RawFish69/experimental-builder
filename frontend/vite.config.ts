@@ -10,7 +10,7 @@ function compressJsonBridgePlugin() {
   const routeMatchers = new Set(['/compress.json'])
   const spriteSourceFile = path.resolve(__dirname, '../media/items/new.png')
   const spriteRouteMatchers = new Set(['/media/items/new.png'])
-  const latestAtreeVersion = '2.1.6.0'
+  const latestAtreeVersion = '2.2.0.12'
   const atreeRoutePattern = /^\/data\/([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)\/atree\.json$/
 
   async function serveJsonFile(res: import('node:http').ServerResponse, filePath: string, kind: string) {

@@ -117,7 +117,7 @@ export const DEFAULT_AUTO_BUILDER_WEIGHTS: AutoBuilderWeights = {
 
 export const DEFAULT_AUTO_BUILD_CONSTRAINTS: AutoBuildConstraints = {
   characterClass: null,
-  level: 106,
+  level: 120,
   mustIncludeIds: [],
   excludedIds: [],
   lockedSlots: {},

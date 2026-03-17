@@ -604,7 +604,7 @@ export function AutoBuilderModal(props: {
     const constraints: AutoBuildConstraints = {
       ...DEFAULT_AUTO_BUILD_CONSTRAINTS,
       characterClass: builderCharacterClass,
-      level: Math.max(1, Math.min(106, Math.round(builderLevel || props.snapshot.level || 106))),
+      level: Math.max(1, Math.min(120, Math.round(builderLevel || props.snapshot.level || 120))),
       mustIncludeIds: must.ids,
       excludedIds: excluded.ids,
       lockedSlots,
@@ -1030,15 +1030,20 @@ export function AutoBuilderModal(props: {
               <div>
                 <FieldLabel>Primary Goal</FieldLabel>
                 <div className="flex flex-wrap gap-2">
-                  {PRIMARY_GOAL_ORDER.map((preset) => (
-                    <ChipButton
-                      key={preset}
-                      active={primaryPreset === preset}
-                      onClick={() => setPrimaryPreset(preset)}
-                    >
-                      {OPTIMIZATION_PRESET_LABELS[preset]}
-                    </ChipButton>
-                  ))}
+                  {PRIMARY_GOAL_ORDER.map((preset) => {
+                    const isDisabled = preset !== 'constraints';
+                    return (
+                      <ChipButton
+                        key={preset}
+                        active={primaryPreset === preset}
+                        disabled={isDisabled}
+                        title={isDisabled ? 'Unavailable right now' : undefined}
+                        onClick={() => setPrimaryPreset(preset)}
+                      >
+                        {OPTIMIZATION_PRESET_LABELS[preset]}
+                      </ChipButton>
+                    );
+                  })}
                 </div>
               </div>
               <div className="rounded-xl border border-[var(--wb-border-muted)] bg-black/10 p-2 text-xs text-[var(--wb-muted)]">
@@ -1066,7 +1071,7 @@ export function AutoBuilderModal(props: {
                 </select>
               </div>
 
-              <NumberField label="Level" value={builderLevel} onChange={(value) => setBuilderLevel(value ?? props.snapshot.level)} min={1} max={106} />
+              <NumberField label="Level" value={builderLevel} onChange={(value) => setBuilderLevel(value ?? props.snapshot.level)} min={1} max={120} />
 
               <div>
                 <FieldLabel>Must-Include Items (comma-separated names)</FieldLabel>

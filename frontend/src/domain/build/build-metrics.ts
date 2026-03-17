@@ -58,7 +58,7 @@ interface EquipFeasibilityResult {
 
 interface SkillpointFeasibilityOptions {
   extraBaseSkillPoints?: SkillVec;
-  /** Override available SP (e.g. 204 for +2-in-two guild tome). Default: level-based (200 at 106). */
+  /** Override available SP (e.g. 204 for +2-in-two guild tome). Default: level-based (200 at 101+). */
   availableSkillPointsOverride?: number;
 }
 
@@ -77,12 +77,12 @@ const AGILITY_MULT_SCALE = 0.951;
 const DEFAULT_AGI_DEF_CAP = 90;
 
 function levelToBaseHp(level: number): number {
-  const clamped = Math.max(1, Math.min(106, Math.round(level || 1)));
+  const clamped = Math.max(1, Math.min(120, Math.round(level || 1)));
   return clamped * 5 + 5;
 }
 
 function levelToAvailableSkillPoints(level: number): number {
-  const clamped = Math.max(1, Math.min(106, Math.round(level || 1)));
+  const clamped = Math.max(1, Math.min(120, Math.round(level || 1)));
   if (clamped >= 101) return 200;
   return (clamped - 1) * 2;
 }
@@ -381,6 +381,102 @@ export function getEquippedItems(input: BuildEvaluationInput, catalog: CatalogSn
   return equipped;
 }
 
+/**
+ * Compute active set counts from equipped item IDs.
+ */
+function computeActiveSetCounts(
+  slots: BuildEvaluationInput['slots'],
+  catalog: CatalogSnapshot,
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const slot of ITEM_SLOTS) {
+    const id = slots[slot];
+    if (id == null) continue;
+    const setName = catalog.itemSetName.get(id);
+    if (!setName) continue;
+    counts.set(setName, (counts.get(setName) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Apply set bonus stats to the build summary. Each set's bonus at tier `count`
+ * is stored at `bonuses[count-1]`. Stat keys map to the same field names used
+ * in compress.json items (e.g. `hprPct`, `spd`, `mr`, `str`, `eDef`, etc.).
+ */
+function applySetBonuses(
+  slots: BuildEvaluationInput['slots'],
+  catalog: CatalogSnapshot,
+  summary: BuildSummary,
+): void {
+  const setCounts = computeActiveSetCounts(slots, catalog);
+  for (const [setName, count] of setCounts) {
+    const meta = catalog.setsMeta.get(setName);
+    if (!meta || count < 1 || count > meta.bonuses.length) continue;
+    const bonus = meta.bonuses[count - 1];
+    if (!bonus || typeof bonus !== 'object') continue;
+
+    for (const [key, val] of Object.entries(bonus)) {
+      if (!Number.isFinite(val) || val === 0) continue;
+      switch (key) {
+        case 'hp':
+        case 'hpBonus':
+          summary.aggregated.hpTotal += val; break;
+        case 'hprRaw':
+        case 'hprPct':
+          summary.aggregated.hprTotal += val; break;
+        case 'mr':
+          summary.aggregated.mr += val; break;
+        case 'ms':
+          summary.aggregated.ms += val; break;
+        case 'ls':
+          summary.aggregated.ls += val; break;
+        case 'spd':
+          summary.aggregated.speed += val; break;
+        case 'str':
+          summary.aggregated.skillPoints.str += val; break;
+        case 'dex':
+          summary.aggregated.skillPoints.dex += val; break;
+        case 'int':
+          summary.aggregated.skillPoints.int += val; break;
+        case 'def':
+          summary.aggregated.skillPoints.def += val; break;
+        case 'agi':
+          summary.aggregated.skillPoints.agi += val; break;
+        case 'eDef':
+          summary.aggregated.defenses.e += val; break;
+        case 'tDef':
+          summary.aggregated.defenses.t += val; break;
+        case 'wDef':
+          summary.aggregated.defenses.w += val; break;
+        case 'fDef':
+          summary.aggregated.defenses.f += val; break;
+        case 'aDef':
+          summary.aggregated.defenses.a += val; break;
+        case 'sdPct':
+          summary.aggregated.offense.spellPct += val; break;
+        case 'sdRaw':
+          summary.aggregated.offense.spellRaw += val; break;
+        case 'mdPct':
+          summary.aggregated.offense.meleePct += val; break;
+        case 'mdRaw':
+          summary.aggregated.offense.meleeRaw += val; break;
+        case 'eDamPct':
+        case 'tDamPct':
+        case 'wDamPct':
+        case 'fDamPct':
+        case 'aDamPct':
+          summary.aggregated.offense.elemDamPct += val; break;
+        case 'damPct':
+        case 'rDamPct':
+        case 'nDamPct':
+          summary.aggregated.offense.genericDamPct += val; break;
+        // Keys not tracked in summary (eSteal, sprintReg, poison, thorns, etc.) are ignored.
+      }
+    }
+  }
+}
+
 export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnapshot, options: BuildEvaluationOptions = {}): BuildSummary {
   const equipped = getEquippedItems(input, catalog);
   const summary: BuildSummary = structuredClone(EMPTY_SUMMARY);
@@ -443,6 +539,10 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
       item.numeric.reqAgi <= 100;
     summary.slotStatus[slot] = { classOk, levelOk, skillReqsMet };
   }
+
+  // Apply set bonuses: count equipped items per set, then apply the matching tier bonus.
+  // Mirrors WynnBuilder beta's build.js: bonus = sets.get(setName).bonuses[count-1].
+  applySetBonuses(input.slots, catalog, summary);
 
   if (!input.characterClass && weaponType) {
     input.characterClass = getClassFromWeaponType(weaponType);

@@ -673,7 +673,7 @@ export function App() {
                   className="wb-input w-22"
                   type="number"
                   min={1}
-                  max={106}
+                  max={120}
                   value={snapshot.level}
                   onChange={(e) => store.setLevel(Number(e.target.value))}
                 />

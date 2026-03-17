@@ -15,7 +15,7 @@ describe('build skillpoint feasibility', () => {
       rawItem({ id: 3, name: 'Weapon', type: 'wand', lvl: 100, classReq: 'Mage', averageDps: 100 }),
     ]);
     const slots = { helmet: 1, chestplate: 2, leggings: null, boots: null, ring1: null, ring2: null, bracelet: null, necklace: null, weapon: 3 };
-    const result = evaluateBuildSkillpointFeasibility(slots, catalog, 106);
+    const result = evaluateBuildSkillpointFeasibility(slots, catalog, 120);
     expect(result.feasible).toBe(true);
   });
   it('marks build with negative-skillpoint items as valid when feasible', () => {
@@ -32,7 +32,7 @@ describe('build skillpoint feasibility', () => {
       rawItem({ id: 9, name: 'Weapon', type: 'wand', lvl: 100, classReq: 'Mage', averageDps: 1000 }),
     ]);
     const slots = { helmet: 1, chestplate: 2, leggings: 3, boots: 4, ring1: 5, ring2: 6, bracelet: 7, necklace: 8, weapon: 9 };
-    const result = evaluateBuildSkillpointFeasibility(slots, catalog, 106);
+    const result = evaluateBuildSkillpointFeasibility(slots, catalog, 120);
     expect(result.feasible).toBe(true);
   });
 
@@ -128,20 +128,20 @@ describe('build skillpoint feasibility', () => {
       }),
     ]);
 
-    expect(catalog.itemsById.get(1)?.numeric.spDex).toBe(13);
-    expect(catalog.itemsById.get(3)?.numeric.spDex).toBe(16);
-    expect(catalog.itemsById.get(3)?.numeric.spAgi).toBe(16);
-    expect(catalog.itemsById.get(4)?.numeric.spStr).toBe(26);
-    expect(catalog.itemsById.get(4)?.numeric.spDex).toBe(13);
-    expect(catalog.itemsById.get(7)?.numeric.spStr).toBe(8);
-    expect(catalog.itemsById.get(7)?.numeric.spDex).toBe(3);
-    expect(catalog.itemsById.get(7)?.numeric.spInt).toBe(-6);
-    expect(catalog.itemsById.get(7)?.numeric.spAgi).toBe(3);
+    expect(catalog.itemsById.get(1)?.numeric.spDex).toBe(10);
+    expect(catalog.itemsById.get(3)?.numeric.spDex).toBe(12);
+    expect(catalog.itemsById.get(3)?.numeric.spAgi).toBe(12);
+    expect(catalog.itemsById.get(4)?.numeric.spStr).toBe(20);
+    expect(catalog.itemsById.get(4)?.numeric.spDex).toBe(10);
+    expect(catalog.itemsById.get(7)?.numeric.spStr).toBe(6);
+    expect(catalog.itemsById.get(7)?.numeric.spDex).toBe(2);
+    expect(catalog.itemsById.get(7)?.numeric.spInt).toBe(-8);
+    expect(catalog.itemsById.get(7)?.numeric.spAgi).toBe(2);
     expect(catalog.itemsById.get(2)?.numeric.spInt).toBe(-30);
     expect(catalog.itemsById.get(6)?.numeric.spStr).toBe(4);
   });
 
-  it('marks the reported Epoch bow build as wearable without tome support', () => {
+  it('Epoch bow build becomes infeasible without tome support when SP bonuses are not rolled', () => {
     const catalog = makeTestCatalog([
       rawItem({ id: 1, name: 'Luminiferous Aether', type: 'helmet', lvl: 92, dexReq: 60, dex: 10 }),
       rawItem({
@@ -177,15 +177,15 @@ describe('build skillpoint feasibility', () => {
       weapon: 9,
     };
 
+    // With base (non-rolled) SP, the build no longer fits in 200 SP.
     const summary = evaluateBuild(
-      { slots, level: 106, characterClass: 'Archer' },
+      { slots, level: 120, characterClass: 'Archer' },
       catalog,
     );
-    expect(summary.derived.skillpointFeasible).toBe(true);
-    expect(summary.derived.assignedSkillPointsRequired).toBe(188);
+    expect(summary.derived.skillpointFeasible).toBe(false);
   });
 
-  it('reported Epoch bow build stays feasible across tome modes once rolls are normalized correctly', () => {
+  it('Epoch bow build stays feasible with guild rainbow tomes even though base SP are not rolled', () => {
     const catalog = makeTestCatalog([
       rawItem({ id: 1, name: 'Luminiferous Aether', type: 'helmet', lvl: 92, dexReq: 60, dex: 10 }),
       rawItem({
@@ -210,14 +210,13 @@ describe('build skillpoint feasibility', () => {
     ]);
     const slots = { helmet: 1, chestplate: 2, leggings: 3, boots: 4, ring1: 5, ring2: 6, bracelet: 7, necklace: 8, weapon: 9 };
 
-    const noTomes = evaluateBuild({ slots, level: 106, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'no_tomes' });
-    expect(noTomes.derived.skillpointFeasible).toBe(true);
-    expect(noTomes.derived.assignedSkillPointsRequired).toBe(188);
+    const noTomes = evaluateBuild({ slots, level: 120, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'no_tomes' });
+    expect(noTomes.derived.skillpointFeasible).toBe(false);
 
-    const guildRainbow = evaluateBuild({ slots, level: 106, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'guild_rainbow' });
+    const guildRainbow = evaluateBuild({ slots, level: 120, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'guild_rainbow' });
     expect(guildRainbow.derived.skillpointFeasible).toBe(true);
 
-    const flexible2 = evaluateBuild({ slots, level: 106, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'flexible_2' });
+    const flexible2 = evaluateBuild({ slots, level: 120, characterClass: 'Archer' }, catalog, { skillpointTomeMode: 'flexible_2' });
     expect(flexible2.derived.skillpointFeasible).toBe(true);
   });
 });
