@@ -92,8 +92,12 @@ function applySnapshot(state: WorkbenchBuildState, snap: WorkbenchSnapshot): voi
   state.legacyHash = snap.legacyHash;
 }
 
+const BIN_CAPACITY = 69;
+
 function dedupePush(list: number[], itemId: number): void {
-  if (!list.includes(itemId)) list.unshift(itemId);
+  if (list.includes(itemId)) return;
+  if (list.length >= BIN_CAPACITY) return;
+  list.unshift(itemId);
 }
 
 export interface WorkbenchStore extends WorkbenchBuildState {

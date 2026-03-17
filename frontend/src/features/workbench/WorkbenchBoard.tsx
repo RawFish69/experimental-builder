@@ -8,7 +8,7 @@ import { categoryLabel, slotLabel, slotToCategory } from '@/domain/items/types';
 import type { CraftedSlotInfo } from '@/domain/build/types';
 import type { WorkbenchStore } from '@/domain/build/workbench-state';
 import { POWDERABLE_SLOTS } from '@/domain/build/powder-data';
-import { Button, ScrollArea, cn } from '@/components/ui';
+import { Button, cn } from '@/components/ui';
 import { ItemCard, ItemRow } from '@/components/ItemDisplay';
 import { PowderSlots } from '@/components/PowderSlots';
 
@@ -106,6 +106,8 @@ function SlotCard(props: {
   );
 }
 
+const BIN_CAPACITY = 69;
+
 function BinColumn(props: {
   category: ItemCategoryKey;
   catalog: CatalogSnapshot;
@@ -120,12 +122,16 @@ function BinColumn(props: {
   const items = props.store.binsByCategory[props.category]
     .map((id) => props.catalog.itemsById.get(id))
     .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const isFull = items.length >= BIN_CAPACITY;
 
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <div className="flex items-center justify-between gap-1">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">
-          {categoryLabel(props.category)} <span className="text-[var(--wb-text-quaternary)]">({items.length})</span>
+          {categoryLabel(props.category)}{' '}
+          <span className={isFull ? 'text-amber-600 dark:text-amber-400' : 'text-[var(--wb-text-quaternary)]'}>
+            ({items.length}/{BIN_CAPACITY})
+          </span>
         </span>
         <button type="button" className="wb-inline-button p-0.5 text-[10px]" onClick={() => props.store.clearCategory(props.category)}>
           <Trash2 size={10} />
@@ -143,7 +149,7 @@ function BinColumn(props: {
             Drop {props.category} here
           </div>
         ) : (
-          <div className="grid max-h-32 gap-0.5 overflow-auto wb-scrollbar">
+          <div className="grid max-h-64 gap-0.5 overflow-auto wb-scrollbar">
             {items.map((item) => (
               <ItemRow
                 key={`${props.category}-${item.id}`}
@@ -206,7 +212,7 @@ export function WorkbenchBoard(props: {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 p-3">
+    <div className="flex flex-col gap-2 p-3">
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
@@ -283,36 +289,34 @@ export function WorkbenchBoard(props: {
       </div>
 
       {/* Item bins/shelves */}
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="grid gap-2">
-          {binSections.map((section) => (
-            <div key={section.key}>
-              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">
-                {section.title}
-              </div>
-              <div
-                className={cn(
-                  'grid gap-1.5',
-                  section.categories.length === 1 ? 'grid-cols-1'
-                    : section.categories.length === 3 ? 'lg:grid-cols-3'
-                    : 'md:grid-cols-2 xl:grid-cols-4',
-                )}
-              >
-                {section.categories.map((category) => (
-                  <BinColumn
-                    key={category}
-                    category={category}
-                    catalog={props.catalog}
-                    store={props.store}
-                    showItemDetails={showItemDetails}
-                    onHoverItem={props.onHoverItem}
-                  />
-                ))}
-              </div>
+      <div className="grid gap-2">
+        {binSections.map((section) => (
+          <div key={section.key}>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">
+              {section.title}
             </div>
-          ))}
-        </div>
-      </ScrollArea>
+            <div
+              className={cn(
+                'grid gap-1.5',
+                section.categories.length === 1 ? 'grid-cols-1'
+                  : section.categories.length === 3 ? 'lg:grid-cols-3'
+                  : 'md:grid-cols-2 xl:grid-cols-4',
+              )}
+            >
+              {section.categories.map((category) => (
+                <BinColumn
+                  key={category}
+                  category={category}
+                  catalog={props.catalog}
+                  store={props.store}
+                  showItemDetails={showItemDetails}
+                  onHoverItem={props.onHoverItem}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* Embedded search results */}
       {props.searchResults && (
