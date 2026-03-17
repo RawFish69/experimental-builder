@@ -35,7 +35,9 @@ describe('ability-tree logic', () => {
   it('uses legacy ability point cap table', () => {
     expect(getAbilityPointCap(1)).toBe(1);
     expect(getAbilityPointCap(50)).toBe(27);
-    expect(getAbilityPointCap(106)).toBe(45);
+    expect(getAbilityPointCap(105)).toBe(45);
+    expect(getAbilityPointCap(106)).toBe(46);
+    expect(getAbilityPointCap(120)).toBe(50);
   });
 
   it('enforces legacy-style parents/dependencies/blockers when toggling', () => {

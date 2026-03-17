@@ -732,7 +732,7 @@ function CandidateCard(props: {
               return (
                 <span
                   key={label}
-                  className={`rounded px-1.5 py-0.5 text-[11px] ${isPositive ? 'bg-emerald-400/15 text-emerald-200' : 'bg-rose-400/15 text-rose-200'}`}
+                  className={`rounded px-1.5 py-0.5 text-[11px] ${isPositive ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300' : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'}`}
                 >
                   {label}: {value}
                 </span>

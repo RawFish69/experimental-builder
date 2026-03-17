@@ -609,8 +609,18 @@ export function App() {
           {/* Spacer */}
           <div className="flex-1" />
 
-          {/* Center: Build Solver + Help */}
+          {/* Center: How to use + Build Solver */}
           <div className="flex items-center gap-1.5">
+            <a
+              className="wb-button px-2 py-1 text-[11px]"
+              data-variant="ghost"
+              href={tutorialUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <CirclePlay size={12} className="mr-1" />
+              How to use
+            </a>
             <button
               type="button"
               className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold text-[var(--wb-accent)] transition-colors hover:bg-[var(--wb-accent-muted)]"
@@ -620,16 +630,6 @@ export function App() {
               <Hammer size={16} />
               <span className="hidden sm:inline">Build Solver</span>
             </button>
-            <a
-              className="wb-button px-2 py-1 text-[11px]"
-              data-variant="ghost"
-              href={tutorialUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <CirclePlay size={12} className="mr-1" />
-              Help
-            </a>
           </div>
 
           {/* Spacer */}

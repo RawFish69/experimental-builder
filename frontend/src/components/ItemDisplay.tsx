@@ -388,11 +388,19 @@ export function ItemCard(props: {
             {!props.compact && <span>{props.item.tier}</span>}
             {!props.compact && props.item.classReq && <span>{props.item.classReq}</span>}
             {props.item.majorIds.length > 0 && (
-              <span
-                className="cursor-help text-[var(--wb-tier-legendary)]"
-                title={props.item.majorIds.map((mid) => `${mid}: ${getMajorIdDescription(mid) ?? 'Major ID'}`).join('\n')}
-              >
-                MID
+              <span className="group relative inline-block cursor-help">
+                <span className="text-[var(--wb-tier-legendary)]">MID</span>
+                <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden min-w-44 max-w-64 rounded-md border border-[var(--wb-border)] bg-[var(--wb-surface)] p-2 shadow-lg group-hover:block">
+                  {props.item.majorIds.map((mid) => {
+                    const desc = getMajorIdDescription(mid);
+                    return (
+                      <div key={mid} className="not-last:mb-1.5">
+                        <div className="text-[11px] font-semibold text-[var(--wb-tier-legendary)]">{mid}</div>
+                        {desc && <div className="mt-0.5 text-[11px] leading-snug text-[var(--wb-text-secondary)]">{desc}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
               </span>
             )}
           </div>

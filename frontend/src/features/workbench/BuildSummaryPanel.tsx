@@ -99,18 +99,7 @@ export function BuildSummaryPanel(props: {
 
           <Separator />
 
-          {/* Offense breakdown */}
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Offense</div>
-            <div className="grid gap-1 rounded-md bg-[var(--wb-layer-1)] p-2">
-              <StatRow label="Legacy Base DPS" value={fmt(props.summary.derived.legacyBaseDps)} valueClassName="wb-text-offense" />
-              <StatRow label="DPS Proxy" value={fmt(props.summary.derived.dpsProxy)} valueClassName="wb-text-offense" />
-              <StatRow label="Spell %/Raw" value={`${fmt(props.summary.aggregated.offense.spellPct)} / ${fmt(props.summary.aggregated.offense.spellRaw)}`} valueClassName="wb-text-offense" />
-              <StatRow label="Melee %/Raw" value={`${fmt(props.summary.aggregated.offense.meleePct)} / ${fmt(props.summary.aggregated.offense.meleeRaw)}`} valueClassName="wb-text-offense" />
-            </div>
-          </div>
-
-          {/* Spell preview (directly after offense) */}
+          {/* Spell preview */}
           {props.spellPreview && (
             <div>
               <div className="mb-1.5 flex items-center justify-between">
