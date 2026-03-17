@@ -3,8 +3,8 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Lock, Pin, Plus } from 'lucide-react';
 import type { NormalizedItem } from '@/domain/items/types';
 import { formatNumericIdLabel } from '@/domain/items/numeric-id-labels';
-import { getMajorIdDescription } from '@/domain/items/major-id-descriptions';
-import { applyWeaponPowders, getArmorPowderDefenseDeltas, type PowderedDamages, type PowderedDefenses } from '@/domain/build/powder-data';
+import { getMajorIdDescription, getMajorIdDisplayName } from '@/domain/items/major-id-descriptions';
+import { applyWeaponPowders, getArmorPowderDefenseDeltas, POWDER_BY_ID, ELEMENT_CSS_VARS, type PowderedDamages, type PowderedDefenses } from '@/domain/build/powder-data';
 import { Button, cn } from '@/components/ui';
 
 /* ─── Types shared across display modes ─── */
@@ -392,10 +392,11 @@ export function ItemCard(props: {
                 <span className="text-[var(--wb-tier-legendary)]">MID</span>
                 <div className="pointer-events-none absolute bottom-full left-0 z-50 mb-1.5 hidden min-w-44 max-w-64 rounded-md border border-[var(--wb-border)] bg-[var(--wb-surface)] p-2 shadow-lg group-hover:block">
                   {props.item.majorIds.map((mid) => {
+                    const name = getMajorIdDisplayName(mid);
                     const desc = getMajorIdDescription(mid);
                     return (
                       <div key={mid} className="not-last:mb-1.5">
-                        <div className="text-[11px] font-semibold text-[var(--wb-tier-legendary)]">{mid}</div>
+                        <div className="text-[11px] font-semibold text-[var(--wb-tier-legendary)]">{name}</div>
                         {desc && <div className="mt-0.5 text-[11px] leading-snug text-[var(--wb-text-secondary)]">{desc}</div>}
                       </div>
                     );
@@ -618,11 +619,30 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; sk
           <div className="flex items-center gap-1.5 px-1">
             <span className="text-[var(--wb-text-tertiary)]">Powder Slots</span>
             <div className="flex gap-0.5">
-              {Array.from({ length: item.powderSlots }).map((_, i) => (
-                <div key={i} className="h-2 w-2 rounded-sm border border-[var(--wb-border)] bg-[var(--wb-layer-2)]" />
-              ))}
+              {Array.from({ length: item.powderSlots }).map((_, i) => {
+                const pid = props.powderIds?.[i];
+                const powder = pid != null && pid >= 0 ? POWDER_BY_ID.get(pid) : null;
+                return powder ? (
+                  <div
+                    key={i}
+                    className="flex h-4 min-w-4 items-center justify-center rounded-sm px-0.5 text-[9px] font-bold"
+                    style={{
+                      background: `color-mix(in srgb, ${ELEMENT_CSS_VARS[powder.element]} 30%, transparent)`,
+                      color: ELEMENT_CSS_VARS[powder.element],
+                      border: `1px solid color-mix(in srgb, ${ELEMENT_CSS_VARS[powder.element]} 50%, transparent)`,
+                    }}
+                    title={powder.label}
+                  >
+                    {powder.short}
+                  </div>
+                ) : (
+                  <div key={i} className="h-4 w-4 rounded-sm border border-dashed border-[var(--wb-border)] bg-[var(--wb-layer-2)]" />
+                );
+              })}
             </div>
-            <span className="text-[var(--wb-text-quaternary)]" style={{ fontFamily: 'var(--font-mono)' }}>[{item.powderSlots}]</span>
+            <span className="text-[var(--wb-text-quaternary)]" style={{ fontFamily: 'var(--font-mono)' }}>
+              [{(props.powderIds?.filter((p) => p != null && p >= 0).length ?? 0)}/{item.powderSlots}]
+            </span>
           </div>
         </>
       )}
@@ -633,10 +653,11 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; sk
           <DetailSpacer />
           <div className="grid gap-1 px-1">
             {item.majorIds.map((mid) => {
+              const name = getMajorIdDisplayName(mid);
               const desc = getMajorIdDescription(mid);
               return (
                 <div key={mid}>
-                  <span className="font-semibold text-[var(--wb-tier-legendary)]">+{mid}</span>
+                  <span className="font-semibold text-[var(--wb-tier-legendary)]">+{name}</span>
                   {desc && (
                     <div className="mt-0.5 text-[11px] leading-snug text-[var(--wb-text-tertiary)]">{desc}</div>
                   )}
