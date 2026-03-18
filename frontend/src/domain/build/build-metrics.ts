@@ -638,10 +638,16 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
 
   const legacyBaseDps = summary.aggregated.offense.baseDps;
   const totalHpForLegacy = levelToBaseHp(input.level) + summary.aggregated.hpTotal;
+
+  // WynnBuilder's EHP uses TOTAL skill points (item bonuses + assigned SP), not just
+  // item bonuses. The assigned SP come from the feasibility solver above.
+  const assignedSp = equipFeasibility.assignedByStat ?? [0, 0, 0, 0, 0];
+  const totalDefSp = summary.aggregated.skillPoints.def + assignedSp[3];
+  const totalAgiSp = summary.aggregated.skillPoints.agi + assignedSp[4];
   const legacyEhp = computeLegacyEhp({
     totalHp: totalHpForLegacy,
-    defSkillPoints: summary.aggregated.skillPoints.def,
-    agiSkillPoints: summary.aggregated.skillPoints.agi,
+    defSkillPoints: totalDefSp,
+    agiSkillPoints: totalAgiSp,
     weaponType,
   });
 
