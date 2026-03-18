@@ -1,5 +1,5 @@
 import { ExternalLink, Link2 } from 'lucide-react';
-import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
+import type { CatalogSnapshot } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
 import { ITEM_SLOTS, slotLabel } from '@/domain/items/types';
 import { diffBuildSummary } from '@/domain/build/build-metrics';
