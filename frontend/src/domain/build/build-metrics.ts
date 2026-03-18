@@ -37,6 +37,7 @@ const EMPTY_SUMMARY: BuildSummary = {
     legacyBaseDps: 0,
     legacyEhp: 0,
     legacyEhpNoAgi: 0,
+    totalHp: 0,
     skillpointFeasible: true,
     assignedSkillPointsRequired: 0,
   },
@@ -654,6 +655,7 @@ export function evaluateBuild(input: BuildEvaluationInput, catalog: CatalogSnaps
     legacyBaseDps,
     legacyEhp: legacyEhp.withAgi,
     legacyEhpNoAgi: legacyEhp.noAgi,
+    totalHp: Math.max(5, totalHpForLegacy),
     skillpointFeasible: equipFeasibility.feasible,
     assignedSkillPointsRequired: Number.isFinite(equipFeasibility.assignedTotal) ? equipFeasibility.assignedTotal : 0,
   };

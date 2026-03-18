@@ -194,6 +194,7 @@ const EXCLUDED_ID_KEYS = new Set([
   'strReq', 'dexReq', 'intReq', 'defReq', 'agiReq',
   'str', 'dex', 'int', 'def', 'agi',
   'lvl', 'slots', 'averageDps',
+  'hp', 'eDef', 'tDef', 'wDef', 'fDef', 'aDef',
 ]);
 
 interface IdEntry { key: string; value: number; label: string }
@@ -212,6 +213,38 @@ function getIdentifications(item: NormalizedItem): IdEntry[] {
 const DEF_KEY_MAP: Record<string, keyof PowderedDefenses> = {
   eDef: 'earth', tDef: 'thunder', wDef: 'water', fDef: 'fire', aDef: 'air',
 };
+
+interface BaseStatLine {
+  key: string;
+  element: string;
+  label: string;
+  value: number;
+  delta?: number;
+}
+
+const BASE_DEF_ENTRIES: [string, string, string][] = [
+  ['eDef', 'Earth', 'Earth Defense'],
+  ['tDef', 'Thunder', 'Thunder Defense'],
+  ['wDef', 'Water', 'Water Defense'],
+  ['fDef', 'Fire', 'Fire Defense'],
+  ['aDef', 'Air', 'Air Defense'],
+];
+
+function getBaseStatLines(item: NormalizedItem, powderedDef?: PowderedDefenses | null): BaseStatLine[] {
+  const lines: BaseStatLine[] = [];
+  const hp = item.numericIndex.hp ?? 0;
+  if (hp !== 0) {
+    lines.push({ key: 'hp', element: 'Neutral', label: 'Health', value: hp });
+  }
+  for (const [key, element, label] of BASE_DEF_ENTRIES) {
+    const val = item.numericIndex[key] ?? 0;
+    const delta = powderedDef ? getDefDelta(key, powderedDef) : 0;
+    if (val !== 0 || delta !== 0) {
+      lines.push({ key, element, label, value: val, delta: delta || undefined });
+    }
+  }
+  return lines;
+}
 
 function getDefDelta(idKey: string, powderedDef: PowderedDefenses): number {
   const elem = DEF_KEY_MAP[idKey];
@@ -285,6 +318,11 @@ export function ItemRow(props: {
         <div className="flex items-center gap-2 text-xs text-[var(--wb-text-tertiary)]">
           <span>{props.item.type}</span>
           <span>Lv. {props.item.level}</span>
+          {(props.item.numericIndex.hp ?? 0) !== 0 && (
+            <span style={{ fontFamily: 'var(--font-mono)' }}>
+              {props.item.numericIndex.hp} HP
+            </span>
+          )}
           {topIds.map((id) => (
             <span
               key={id.key}
@@ -343,7 +381,9 @@ export function ItemCard(props: {
     : undefined;
 
   const powderedDmg = props.powderIds ? computePowderedDamages(props.item, props.powderIds) : null;
+  const powderedDef = props.powderIds ? computePowderedDefenses(props.item, props.powderIds) : null;
   const damages = getDamageLines(props.item, powderedDmg);
+  const baseStats = getBaseStatLines(props.item, powderedDef);
   const topIds = getIdentifications(props.item).slice(0, props.compact ? 4 : 6);
 
   return (
@@ -421,6 +461,32 @@ export function ItemCard(props: {
               <span style={{ fontFamily: 'var(--font-mono)' }}>{d.range}</span>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Base stats: HP and elemental defenses (static, non-rolled) */}
+      {baseStats.length > 0 && (
+        <div className="mt-1.5 grid gap-px">
+          {baseStats.map((bs) => {
+            const effective = bs.value + (bs.delta ?? 0);
+            return (
+              <div
+                key={bs.key}
+                className="flex items-center justify-between rounded px-1.5 py-0.5 text-[13px]"
+                style={{ background: elemBgVar(bs.element), color: elemColorVar(bs.element) }}
+              >
+                <span className="font-medium">{bs.label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {effective}
+                  {bs.delta != null && bs.delta !== 0 && (
+                    <span className="ml-0.5 text-[10px] opacity-60">
+                      ({bs.delta > 0 ? '+' : ''}{bs.delta})
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -512,10 +578,13 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; sk
   const powderedDmg = props.powderIds ? computePowderedDamages(item, props.powderIds) : null;
   const powderedDef = props.powderIds ? computePowderedDefenses(item, props.powderIds) : null;
   const damages = getDamageLines(item, powderedDmg);
+  const baseStats = getBaseStatLines(item, powderedDef);
   const reqs = getRequirements(item);
   const spBonuses = getSpBonuses(item);
   const ids = getIdentifications(item);
   const atkSpd = item.atkSpd;
+
+  const hasBaseSection = damages.length > 0 || baseStats.length > 0 || !!atkSpd;
 
   return (
     <div className="mt-2 text-[13px]">
@@ -542,7 +611,33 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; sk
         </div>
       )}
 
-      {((!props.skipDamageLines && damages.length > 0) || atkSpd) && <DetailSpacer />}
+      {/* Base stats: HP and elemental defenses (skipped when parent already renders them) */}
+      {!props.skipDamageLines && baseStats.length > 0 && (
+        <div className={cn('grid gap-0.5', damages.length > 0 && 'mt-1')}>
+          {baseStats.map((bs) => {
+            const effective = bs.value + (bs.delta ?? 0);
+            return (
+              <div
+                key={bs.key}
+                className="flex items-center justify-between rounded px-1.5 py-0.5"
+                style={{ background: elemBgVar(bs.element), color: elemColorVar(bs.element) }}
+              >
+                <span className="font-medium">{bs.label}</span>
+                <span style={{ fontFamily: 'var(--font-mono)' }}>
+                  {effective}
+                  {bs.delta != null && bs.delta !== 0 && (
+                    <span className="ml-0.5 text-[10px] opacity-60">
+                      ({bs.delta > 0 ? '+' : ''}{bs.delta})
+                    </span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!props.skipDamageLines && hasBaseSection && <DetailSpacer />}
 
       {/* Requirements */}
       {reqs.length > 0 && (
@@ -583,32 +678,23 @@ function ItemDetailBlock(props: { item: NormalizedItem; powderIds?: number[]; sk
         </div>
       )}
 
-      {/* All IDs */}
+      {/* All IDs (rolled identifications) */}
       {ids.length > 0 && (
         <div className="grid gap-0.5">
-          {ids.map((id) => {
-            const defDelta = powderedDef ? getDefDelta(id.key, powderedDef) : 0;
-            const effective = id.value + defDelta;
-            return (
-              <div key={id.key} className="flex items-center justify-between px-1">
-                <span className="text-[var(--wb-text-tertiary)]">{id.label}</span>
-                <span
-                  className="font-medium"
-                  style={{
-                    fontFamily: 'var(--font-mono)',
-                    color: effective > 0 ? 'var(--wb-id-positive)' : effective < 0 ? 'var(--wb-id-negative)' : 'var(--wb-text-secondary)',
-                  }}
-                >
-                  {fmtIdValue(effective)}
-                  {defDelta !== 0 && (
-                    <span className="ml-0.5 text-[10px] opacity-60">
-                      ({defDelta > 0 ? '+' : ''}{defDelta})
-                    </span>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {ids.map((id) => (
+            <div key={id.key} className="flex items-center justify-between px-1">
+              <span className="text-[var(--wb-text-tertiary)]">{id.label}</span>
+              <span
+                className="font-medium"
+                style={{
+                  fontFamily: 'var(--font-mono)',
+                  color: id.value > 0 ? 'var(--wb-id-positive)' : id.value < 0 ? 'var(--wb-id-negative)' : 'var(--wb-text-secondary)',
+                }}
+              >
+                {fmtIdValue(id.value)}
+              </span>
+            </div>
+          ))}
         </div>
       )}
 

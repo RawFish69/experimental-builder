@@ -49,6 +49,8 @@ export interface BuildSummary {
     legacyBaseDps: number;
     legacyEhp: number;
     legacyEhpNoAgi: number;
+    /** Total HP = levelToBaseHp(level) + sum(item hp + hpBonus), matching WynnBuilder's display. */
+    totalHp: number;
     skillpointFeasible: boolean;
     assignedSkillPointsRequired: number;
   };

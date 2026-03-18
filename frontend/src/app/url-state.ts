@@ -257,6 +257,25 @@ export function encodeWorkbenchSnapshot(snapshot: WorkbenchSnapshot): string {
   return encodeParam(JSON.stringify(payload));
 }
 
+function isWorkbenchEmpty(snapshot: WorkbenchSnapshot): boolean {
+  const hasAnySlot = ITEM_SLOTS.some((slot) => snapshot.slots[slot] != null);
+  if (hasAnySlot) return false;
+  const hasAnyBin = ITEM_CATEGORY_KEYS.some(
+    (cat) => (snapshot.binsByCategory[cat]?.length ?? 0) > 0,
+  );
+  if (hasAnyBin) return false;
+  if (snapshot.legacyHash) return false;
+  if (snapshot.characterClass) return false;
+  return true;
+}
+
+function hasAnyAbilityTreeSelections(state: AbilityTreeUrlState | null | undefined): boolean {
+  if (!state?.selectedByClass) return false;
+  return Object.values(state.selectedByClass).some(
+    (arr) => arr != null && arr.length > 0,
+  );
+}
+
 export function writeUrlState(args: {
   search?: SearchFilterState;
   workbenchSnapshot: WorkbenchSnapshot;
@@ -265,30 +284,41 @@ export function writeUrlState(args: {
   abilityTreeState?: AbilityTreeUrlState | null;
   replace?: boolean;
 }): void {
+  const wbEmpty = isWorkbenchEmpty(args.workbenchSnapshot);
+  const hasAtree = hasAnyAbilityTreeSelections(args.abilityTreeState);
+  const hash = args.legacyHash ?? args.workbenchSnapshot.legacyHash;
+
+  if (wbEmpty && !hasAtree && !args.mode && !hash) {
+    const cleanUrl = window.location.origin + window.location.pathname;
+    if (args.replace) {
+      window.history.replaceState({}, '', cleanUrl);
+    } else {
+      window.history.pushState({}, '', cleanUrl);
+    }
+    return;
+  }
+
   const url = new URL(window.location.origin + window.location.pathname);
   const params = url.searchParams;
 
-  // Only persist build data: workbench snapshot + ability tree. No search state.
-  params.set('wb', encodeWorkbenchSnapshot(args.workbenchSnapshot));
+  if (!wbEmpty) {
+    params.set('wb', encodeWorkbenchSnapshot(args.workbenchSnapshot));
+  }
 
-  if (args.abilityTreeState && Object.keys(args.abilityTreeState.selectedByClass ?? {}).length > 0) {
+  if (hasAtree) {
     params.set(
       'atree',
       encodeParam(
         JSON.stringify({
-          v: args.abilityTreeState.version ?? null,
-          s: args.abilityTreeState.selectedByClass,
+          v: args.abilityTreeState!.version ?? null,
+          s: args.abilityTreeState!.selectedByClass,
         }),
       ),
     );
-  } else {
-    params.delete('atree');
   }
 
   if (args.mode) params.set('mode', args.mode);
-  else params.delete('mode');
 
-  const hash = args.legacyHash ?? args.workbenchSnapshot.legacyHash;
   url.hash = hash ? `#${hash}` : '';
 
   if (args.replace) {

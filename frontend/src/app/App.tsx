@@ -21,7 +21,7 @@ import type { SearchFilterState, SearchResultPage } from '@/domain/search/filter
 import { DEFAULT_SEARCH_FILTER_STATE, hasActiveSearchFilters } from '@/domain/search/filter-schema';
 import { SearchWorkerClient } from '@/domain/search/search-worker-client';
 import { SearchPanel, SearchResultList } from '@/features/search/SearchPanel';
-import { BuildSummaryPanel } from '@/features/workbench/BuildSummaryPanel';
+import { BuildSummaryPanel, BuildDefenseIdsBlock } from '@/features/workbench/BuildSummaryPanel';
 import { WorkbenchBoard } from '@/features/workbench/WorkbenchBoard';
 import { evaluateBuild } from '@/domain/build/build-metrics';
 import { legacyCodecAdapter } from '@/domain/build/legacy-codec-adapter';
@@ -811,29 +811,56 @@ export function App() {
         {/* ─── Content area (3-column) ─── */}
         <div className="flex min-h-0 flex-1">
           {/* Left Sidebar — overlay on mobile, inline on desktop */}
-          {!sidebarCollapsed && (
-            <>
-              {/* Backdrop for mobile overlay */}
-              <div
-                className="fixed inset-0 z-20 bg-black/40 md:hidden"
-                onClick={() => setSidebarCollapsed(true)}
-              />
-              <aside className="fixed inset-y-0 left-0 z-30 flex w-[85vw] max-w-[320px] flex-col border-r border-[var(--wb-surface-border)] bg-[var(--wb-surface)] shadow-xl md:static md:z-auto md:w-[280px] md:max-w-none md:shadow-none xl:w-[320px]">
-                <SearchPanel
-                  catalog={catalog}
-                  state={searchState}
-                  setState={setSearchState}
-                  result={searchResult}
-                  loading={searchLoading}
-                  selectedSlot={snapshot.selectedSlot}
-                  onPin={handlePinFromSearch}
-                  onEquip={handleEquipFromSearch}
-                  onHover={() => {}}
-                  onSearch={() => setSearchTrigger((t) => t + 1)}
+          {!sidebarCollapsed && (() => {
+            const showDefenseIdsOnLeft = (spellPreview?.spells?.length ?? 0) > 0;
+            return (
+              <>
+                {/* Backdrop for mobile overlay */}
+                <div
+                  className="fixed inset-0 z-20 bg-black/40 md:hidden"
+                  onClick={() => setSidebarCollapsed(true)}
                 />
-              </aside>
-            </>
-          )}
+                <aside className="fixed inset-y-0 left-0 z-30 flex w-[85vw] max-w-[320px] flex-col border-r border-[var(--wb-surface-border)] bg-[var(--wb-surface)] shadow-xl md:static md:z-auto md:w-[280px] md:max-w-none md:shadow-none xl:w-[320px]">
+                  {showDefenseIdsOnLeft ? (
+                    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                      {/* Defense & IDs on top */}
+                      <div className="flex-none overflow-auto border-b border-[var(--wb-border-muted)] p-3 wb-scrollbar" style={{ maxHeight: '50%' }}>
+                        <BuildDefenseIdsBlock summary={summary} snapshot={snapshot} catalog={catalog} />
+                      </div>
+                      {/* Item search below */}
+                      <div className="min-h-0 flex-1 overflow-hidden">
+                        <SearchPanel
+                          catalog={catalog}
+                          state={searchState}
+                          setState={setSearchState}
+                          result={searchResult}
+                          loading={searchLoading}
+                          selectedSlot={snapshot.selectedSlot}
+                          onPin={handlePinFromSearch}
+                          onEquip={handleEquipFromSearch}
+                          onHover={() => {}}
+                          onSearch={() => setSearchTrigger((t) => t + 1)}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <SearchPanel
+                      catalog={catalog}
+                      state={searchState}
+                      setState={setSearchState}
+                      result={searchResult}
+                      loading={searchLoading}
+                      selectedSlot={snapshot.selectedSlot}
+                      onPin={handlePinFromSearch}
+                      onEquip={handleEquipFromSearch}
+                      onHover={() => {}}
+                      onSearch={() => setSearchTrigger((t) => t + 1)}
+                    />
+                  )}
+                </aside>
+              </>
+            );
+          })()}
 
           {/* Main panel */}
           <main className="min-w-0 flex-1 overflow-auto bg-[var(--wb-canvas)] wb-scrollbar">
@@ -878,6 +905,7 @@ export function App() {
                   compareSummary={compareSummary}
                   compareSlot={snapshot.comparePreview.slot}
                   spellPreview={spellPreview}
+                  hideDefenseIds={(spellPreview?.spells?.length ?? 0) > 0}
                   abilityTreeSummary={
                     abilityTreeEvaluation && abilityTreeClass
                       ? {

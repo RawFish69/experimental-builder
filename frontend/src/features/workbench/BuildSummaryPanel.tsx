@@ -1,14 +1,20 @@
 import { ExternalLink, Link2 } from 'lucide-react';
-import type { CatalogSnapshot } from '@/domain/items/types';
+import type { CatalogSnapshot, NormalizedItem } from '@/domain/items/types';
 import type { BuildSummary, ItemSlot, WorkbenchSnapshot } from '@/domain/build/types';
-import { slotLabel } from '@/domain/items/types';
+import { ITEM_SLOTS, slotLabel } from '@/domain/items/types';
 import { diffBuildSummary } from '@/domain/build/build-metrics';
+import { formatNumericIdLabel } from '@/domain/items/numeric-id-labels';
 import { Button, KpiTile, ScrollArea, Separator, StatRow } from '@/components/ui';
 import { ManaSustainPanel } from '@/features/workbench/ManaSustainPanel';
 import type { WorkbenchSpellPreviewResult } from '@/domain/ability-tree/spell-preview';
 
 function fmt(n: number): string {
   return Number.isFinite(n) ? Math.round(n).toLocaleString() : '-';
+}
+
+function fmtSigned(n: number): string {
+  const prefix = n > 0 ? '+' : '';
+  return Number.isFinite(n) ? `${prefix}${Math.round(n).toLocaleString()}` : '-';
 }
 
 export interface SummaryActions {
@@ -25,6 +31,118 @@ export interface AbilityTreeSummaryInfo {
   hasErrors: boolean;
 }
 
+/* ─── Detailed IDs aggregation ─── */
+
+const BUILD_ID_SKIP_KEYS = new Set([
+  'reqTotal', 'skillPointTotal', 'offenseScore', 'ehpProxy', 'utilityScore',
+  'sumSpPct', 'sumSpRaw', 'averageDps',
+  'strReq', 'dexReq', 'intReq', 'defReq', 'agiReq',
+  'str', 'dex', 'int', 'def', 'agi',
+  'hp', 'eDef', 'tDef', 'wDef', 'fDef', 'aDef',
+  'lvl', 'slots',
+]);
+
+const BUILD_ID_DISPLAY_ORDER = [
+  'hpBonus', 'hprRaw', 'hprPct',
+  'mr', 'ms', 'ls',
+  'sdRaw', 'sdPct', 'mdRaw', 'mdPct',
+  'damPct', 'nDamPct', 'rDamPct',
+  'eDamPct', 'tDamPct', 'wDamPct', 'fDamPct', 'aDamPct',
+  'poison', 'spd', 'atkTier',
+];
+
+function computeAggregatedIds(
+  snapshot: WorkbenchSnapshot,
+  catalog: CatalogSnapshot,
+): { key: string; value: number; label: string }[] {
+  const sums = new Map<string, number>();
+  for (const slot of ITEM_SLOTS) {
+    const id = snapshot.slots[slot];
+    if (id == null) continue;
+    const item = catalog.itemsById.get(id);
+    if (!item) continue;
+    for (const [key, val] of Object.entries(item.numericIndex)) {
+      if (BUILD_ID_SKIP_KEYS.has(key)) continue;
+      if (typeof val !== 'number' || !Number.isFinite(val) || val === 0) continue;
+      sums.set(key, (sums.get(key) ?? 0) + val);
+    }
+  }
+
+  const ordered: { key: string; value: number; label: string }[] = [];
+  const used = new Set<string>();
+  for (const key of BUILD_ID_DISPLAY_ORDER) {
+    const val = sums.get(key);
+    if (val != null && val !== 0) {
+      ordered.push({ key, value: val, label: formatNumericIdLabel(key) });
+    }
+    used.add(key);
+  }
+  for (const [key, val] of sums) {
+    if (used.has(key) || val === 0) continue;
+    ordered.push({ key, value: val, label: formatNumericIdLabel(key) });
+  }
+  return ordered;
+}
+
+/* ─── Defense & IDs Block (reusable — can be placed in left or right sidebar) ─── */
+
+export function BuildDefenseIdsBlock(props: {
+  summary: BuildSummary;
+  snapshot: WorkbenchSnapshot;
+  catalog: CatalogSnapshot;
+}) {
+  const ids = computeAggregatedIds(props.snapshot, props.catalog);
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {/* Defense stats */}
+      <div>
+        <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Defense & Utility</div>
+        <div className="grid gap-1 rounded-md bg-[var(--wb-layer-1)] p-2">
+          <StatRow label="Total HP" value={fmt(props.summary.derived.totalHp)} valueClassName="wb-text-defense" />
+          <StatRow label="EHP (AGI)" value={fmt(props.summary.derived.legacyEhp)} valueClassName="wb-text-defense" />
+          <StatRow label="EHP (No AGI)" value={fmt(props.summary.derived.legacyEhpNoAgi)} valueClassName="wb-text-defense" />
+          <StatRow label="HPR Total" value={fmt(props.summary.aggregated.hprTotal)} />
+          <div className="my-0.5 h-px bg-[var(--wb-border-muted)]" />
+          <StatRow label="Earth Def" value={fmt(props.summary.aggregated.defenses.e)} valueClassName="text-[var(--wb-elem-earth)]" />
+          <StatRow label="Thunder Def" value={fmt(props.summary.aggregated.defenses.t)} valueClassName="text-[var(--wb-elem-thunder)]" />
+          <StatRow label="Water Def" value={fmt(props.summary.aggregated.defenses.w)} valueClassName="text-[var(--wb-elem-water)]" />
+          <StatRow label="Fire Def" value={fmt(props.summary.aggregated.defenses.f)} valueClassName="text-[var(--wb-elem-fire)]" />
+          <StatRow label="Air Def" value={fmt(props.summary.aggregated.defenses.a)} valueClassName="text-[var(--wb-elem-air)]" />
+          <div className="my-0.5 h-px bg-[var(--wb-border-muted)]" />
+          <StatRow label="MR / MS / LS" value={`${fmt(props.summary.aggregated.mr)} / ${fmt(props.summary.aggregated.ms)} / ${fmt(props.summary.aggregated.ls)}`} />
+          <StatRow label="Walk Speed" value={fmt(props.summary.aggregated.speed)} />
+        </div>
+      </div>
+
+      {/* Detailed Build IDs */}
+      {ids.length > 0 && (
+        <div>
+          <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Build IDs</div>
+          <div className="grid gap-0.5 rounded-md bg-[var(--wb-layer-1)] p-2 text-[13px]">
+            {ids.map((id) => (
+              <div key={id.key} className="flex items-center justify-between px-1">
+                <span className="text-[var(--wb-text-tertiary)]">{id.label}</span>
+                <span
+                  className="font-medium"
+                  style={{
+                    fontFamily: 'var(--font-mono)',
+                    color: id.value > 0 ? 'var(--wb-id-positive)' : id.value < 0 ? 'var(--wb-id-negative)' : 'var(--wb-text-secondary)',
+                  }}
+                >
+                  {fmtSigned(id.value)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Main BuildSummaryPanel ─── */
+
 export function BuildSummaryPanel(props: {
   catalog: CatalogSnapshot;
   snapshot: WorkbenchSnapshot;
@@ -34,6 +152,7 @@ export function BuildSummaryPanel(props: {
   abilityTreeSummary?: AbilityTreeSummaryInfo | null;
   spellPreview?: WorkbenchSpellPreviewResult | null;
   actions: SummaryActions;
+  hideDefenseIds?: boolean;
 }) {
   const delta = props.compareSummary ? diffBuildSummary(props.summary, props.compareSummary) : null;
   const meleePreview = props.spellPreview?.melee ?? null;
@@ -162,21 +281,17 @@ export function BuildSummaryPanel(props: {
 
           <Separator />
 
-          {/* Defense breakdown */}
-          <div>
-            <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Defense & Utility</div>
-            <div className="grid gap-1 rounded-md bg-[var(--wb-layer-1)] p-2">
-              <StatRow label="EHP (AGI)" value={fmt(props.summary.derived.legacyEhp)} valueClassName="wb-text-defense" />
-              <StatRow label="EHP (No AGI)" value={fmt(props.summary.derived.legacyEhpNoAgi)} valueClassName="wb-text-defense" />
-              <StatRow label="EHP Proxy" value={fmt(props.summary.derived.ehpProxy)} valueClassName="wb-text-defense" />
-              <StatRow label="HP Total" value={fmt(props.summary.aggregated.hpTotal)} valueClassName="wb-text-defense" />
-              <StatRow label="HPR Total" value={fmt(props.summary.aggregated.hprTotal)} />
-              <StatRow label="MR / MS / LS" value={`${fmt(props.summary.aggregated.mr)} / ${fmt(props.summary.aggregated.ms)} / ${fmt(props.summary.aggregated.ls)}`} />
-              <StatRow label="Walk Speed" value={fmt(props.summary.aggregated.speed)} />
-            </div>
-          </div>
-
-          <Separator />
+          {/* Defense & IDs (conditionally hidden when shown on left sidebar) */}
+          {!props.hideDefenseIds && (
+            <>
+              <BuildDefenseIdsBlock
+                summary={props.summary}
+                snapshot={props.snapshot}
+                catalog={props.catalog}
+              />
+              <Separator />
+            </>
+          )}
 
           {/* Warnings */}
           <div>
