@@ -11,3 +11,6 @@ lib/
 pyvenv.cfg
 
 __pycache__
+
+.superpowers/
+docs/superpowers/
