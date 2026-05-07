@@ -287,7 +287,7 @@ export function ItemRow(props: {
       ref={props.dragData ? draggable.setNodeRef : undefined}
       style={style}
       className={cn(
-        'group flex items-center gap-2 rounded-md border border-transparent px-2 py-1.5 transition-colors hover:border-[var(--wb-border)] hover:bg-[var(--wb-layer-1)]',
+        'group flex items-center gap-2 border border-transparent px-2 py-1.5 transition-colors hover:border-[var(--wb-border)] hover:bg-[var(--wb-layer-1)]',
         draggable.isDragging && 'ring-1 ring-[var(--wb-accent-border)]',
       )}
       onMouseEnter={() => props.onHover?.(true)}

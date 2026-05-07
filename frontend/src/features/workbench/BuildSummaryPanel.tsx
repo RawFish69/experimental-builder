@@ -98,7 +98,7 @@ export function BuildDefenseIdsBlock(props: {
       {/* Defense stats */}
       <div>
         <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Defense & Utility</div>
-        <div className="grid gap-1 rounded-md bg-[var(--wb-layer-1)] p-2">
+        <div className="grid gap-1 bg-[var(--wb-layer-1)] p-2">
           <StatRow label="Total HP" value={fmt(props.summary.derived.totalHp)} valueClassName="wb-text-defense" />
           <StatRow label="EHP (AGI)" value={fmt(props.summary.derived.legacyEhp)} valueClassName="wb-text-defense" />
           <StatRow label="EHP (No AGI)" value={fmt(props.summary.derived.legacyEhpNoAgi)} valueClassName="wb-text-defense" />
@@ -119,7 +119,7 @@ export function BuildDefenseIdsBlock(props: {
       {ids.length > 0 && (
         <div>
           <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Build IDs</div>
-          <div className="grid gap-0.5 rounded-md bg-[var(--wb-layer-1)] p-2 text-[13px]">
+          <div className="grid gap-0.5 bg-[var(--wb-layer-1)] p-2 text-[13px]">
             {ids.map((id) => (
               <div key={id.key} className="flex items-center justify-between px-1">
                 <span className="text-[var(--wb-text-tertiary)]">{id.label}</span>
@@ -184,7 +184,7 @@ export function BuildSummaryPanel(props: {
 
           {/* Melee detail line */}
           {meleePreview && (
-            <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-2 text-xs text-[var(--wb-text-tertiary)]">
+            <div className="bg-[var(--wb-layer-1)] px-2.5 py-2 text-xs text-[var(--wb-text-tertiary)]">
               <span className="wb-text-offense" style={{ fontFamily: 'var(--font-mono)' }}>{fmt(meleePreview.dps)}</span>
               {' '}DPS ({meleePreview.attackSpeedTier}) &middot; Per hit{' '}
               <span style={{ fontFamily: 'var(--font-mono)' }}>{fmt(meleePreview.perAttackAverage)}</span>
@@ -193,13 +193,13 @@ export function BuildSummaryPanel(props: {
 
           {/* SP Feasibility */}
           <div className="grid grid-cols-2 gap-1.5 text-xs">
-            <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-2">
+            <div className="bg-[var(--wb-layer-1)] px-2.5 py-2">
               <span className="text-[var(--wb-text-tertiary)]">SP: </span>
               <span className={props.summary.derived.skillpointFeasible ? 'wb-text-success' : 'wb-text-danger'}>
                 {props.summary.derived.skillpointFeasible ? 'Wearable' : 'Invalid'}
               </span>
             </div>
-            <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-2">
+            <div className="bg-[var(--wb-layer-1)] px-2.5 py-2">
               <span className="text-[var(--wb-text-tertiary)]">Assigned: </span>
               <span style={{ fontFamily: 'var(--font-mono)' }}>{fmt(props.summary.derived.assignedSkillPointsRequired)}</span>
             </div>
@@ -231,14 +231,14 @@ export function BuildSummaryPanel(props: {
                 </div>
               )}
               {props.spellPreview.spells.length === 0 ? (
-                <div className="rounded-md border border-dashed border-[var(--wb-border)] p-3 text-center text-xs text-[var(--wb-text-quaternary)]">
+                <div className="border border-dashed border-[var(--wb-border)] p-3 text-center text-xs text-[var(--wb-text-quaternary)]">
                   No spell entries. Select spell nodes in ability tree.
                 </div>
               ) : (
                 <ScrollArea className="max-h-[36vh]">
                   <div className="grid gap-1.5">
                     {props.spellPreview.spells.map((spell) => (
-                      <div key={`${spell.baseSpell}-${spell.name}`} className="rounded-md bg-[var(--wb-layer-1)] p-2">
+                      <div key={`${spell.baseSpell}-${spell.name}`} className="bg-[var(--wb-layer-1)] p-2">
                         <div className="flex items-center justify-between gap-1.5 text-[13px]">
                           <div className="flex items-center gap-1 font-medium">
                             <span>{spell.name}</span>
@@ -297,7 +297,7 @@ export function BuildSummaryPanel(props: {
           <div>
             <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-[var(--wb-text-quaternary)]">Warnings</div>
             {props.summary.warnings.messages.length === 0 ? (
-              <div className="rounded-md bg-[var(--wb-success-muted)] px-2.5 py-2 text-xs text-[var(--wb-success)]">
+              <div className="bg-[var(--wb-success-muted)] px-2.5 py-2 text-xs text-[var(--wb-success)]">
                 No warnings.
               </div>
             ) : (
@@ -314,7 +314,7 @@ export function BuildSummaryPanel(props: {
           </div>
 
           {/* Info note */}
-          <div className="rounded-md bg-[var(--wb-layer-1)] p-2 text-[11px] text-[var(--wb-text-quaternary)]">
+          <div className="bg-[var(--wb-layer-1)] p-2 text-[11px] text-[var(--wb-text-quaternary)]">
             KPIs use legacy-compatible metrics. ATree spell effects are shown above but not included in base DPS/EHP.
           </div>
         </div>

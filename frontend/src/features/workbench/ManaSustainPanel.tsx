@@ -118,7 +118,7 @@ export function ManaSustainPanel(props: {
           ) : (
             <>
               <div
-                className="rounded-md border px-2.5 py-2 text-xs"
+                className="border px-2.5 py-2 text-xs"
                 style={{
                   borderColor: result.sustainable ? 'var(--wb-success-border)' : 'var(--wb-danger-border)',
                   background: result.sustainable ? 'var(--wb-success-muted)' : 'var(--wb-danger-muted)',
@@ -135,16 +135,16 @@ export function ManaSustainPanel(props: {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-1 text-xs">
-                <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-1.5">
+                <div className="bg-[var(--wb-layer-1)] px-2.5 py-1.5">
                   <div className="text-[11px] text-[var(--wb-text-quaternary)]">Gain/s</div>
                   <div className="wb-text-success font-medium" style={{ fontFamily: 'var(--font-mono)' }}>{fmt(result.manaGainPerSecond)}</div>
                 </div>
-                <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-1.5">
+                <div className="bg-[var(--wb-layer-1)] px-2.5 py-1.5">
                   <div className="text-[11px] text-[var(--wb-text-quaternary)]">Usage/s</div>
                   <div className="wb-text-offense font-medium" style={{ fontFamily: 'var(--font-mono)' }}>{fmt(result.manaUsagePerSecond)}</div>
                 </div>
               </div>
-              <div className="rounded-md bg-[var(--wb-layer-1)] px-2.5 py-1.5 text-xs">
+              <div className="bg-[var(--wb-layer-1)] px-2.5 py-1.5 text-xs">
                 <div className="text-[11px] text-[var(--wb-text-quaternary)]">Sustained Spell DPS</div>
                 <div className="wb-text-offense font-semibold" style={{ fontFamily: 'var(--font-mono)' }}>{fmtInt(result.sustainedSpellDps)}</div>
               </div>

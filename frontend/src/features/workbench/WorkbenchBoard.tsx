@@ -55,7 +55,7 @@ function SlotCard(props: {
     <div
       ref={setNodeRef}
       className={cn(
-        'rounded-md border p-1.5',
+        'border p-1.5',
         isOver ? 'border-[var(--wb-success)] bg-[var(--wb-success-muted)]' : 'border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
       )}
       onMouseEnter={() => props.store.setSelectedSlot(props.slot)}
@@ -140,7 +140,7 @@ function BinColumn(props: {
       <div
         ref={setNodeRef}
         className={cn(
-          'min-h-10 rounded-md border p-1',
+          'min-h-10 border p-1',
           isOver ? 'border-[var(--wb-success)] bg-[var(--wb-success-muted)]' : 'border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
         )}
       >
@@ -279,7 +279,7 @@ export function WorkbenchBoard(props: {
             const item = props.catalog.itemsById.get(focusedItemForBoard!.itemId);
             if (!item) return null;
             return (
-              <div className="rounded-md border border-[var(--wb-accent-border)] bg-[var(--wb-accent-muted)] p-1.5">
+              <div className="border border-[var(--wb-accent-border)] bg-[var(--wb-accent-muted)] p-1.5">
                 <div className="mb-1 text-[10px] text-[var(--wb-accent-text)]">{focusedItemForBoard!.source}</div>
                 <ItemCard item={item} compact showDetails={showItemDetails} />
               </div>
@@ -320,7 +320,7 @@ export function WorkbenchBoard(props: {
 
       {/* Embedded search results */}
       {props.searchResults && (
-        <div className="flex min-h-[180px] max-h-[35vh] min-w-0 flex-col overflow-hidden rounded-md border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]">
+        <div className="flex min-h-[180px] max-h-[35vh] min-w-0 flex-col overflow-hidden border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]">
           {props.searchResults}
         </div>
       )}

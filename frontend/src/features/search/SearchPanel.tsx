@@ -172,7 +172,7 @@ export function SearchResultList(props: {
       <div
         ref={parentRef}
         className={cn(
-          'wb-scrollbar overflow-auto rounded-md border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
+          'wb-scrollbar overflow-auto border border-[var(--wb-border-muted)] bg-[var(--wb-layer-1)]',
           props.embedded ? 'min-h-0 flex-1' : 'h-[calc(100vh-22rem)]',
         )}
       >
