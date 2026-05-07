@@ -12,7 +12,7 @@ import {
 } from '@dnd-kit/core';
 import { sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 import { useShallow } from 'zustand/react/shallow';
-import { CirclePlay, FlaskConical, Hammer, Link2, Menu, TreePine, X } from 'lucide-react';
+import { Link2, Menu, X } from 'lucide-react';
 import { applyThemeMode, persistThemeMode, readStoredThemeMode, type ThemeMode } from '@/app/theme-mode';
 import { itemCatalogService } from '@/domain/items/catalog-service';
 import type { CatalogSnapshot, ItemCategoryKey, ItemSlot } from '@/domain/items/types';
@@ -102,7 +102,6 @@ function snapshotFromStore(store: Pick<WorkbenchStore, 'slots' | 'craftedSlots' 
 }
 
 export function App() {
-  const tutorialUrl = 'https://www.youtube.com/watch?v=BGEwpXTIjQo';
   const initialParsedRef = useRef<ReturnType<typeof parseUrlState> | null>(null);
   if (!initialParsedRef.current && typeof window !== 'undefined') {
     initialParsedRef.current = parseUrlState(window.location);
@@ -556,7 +555,7 @@ export function App() {
   if (catalogError) {
     return (
       <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
-        <div className="wb-panel max-w-md rounded-lg p-5">
+        <div className="wb-panel max-w-md p-5">
           <div className="text-base font-semibold">Failed to load</div>
           <div className="mt-1 text-[13px] text-[var(--wb-text-secondary)]">{catalogError}</div>
         </div>
@@ -567,7 +566,7 @@ export function App() {
   if (!catalog || !summary) {
     return (
       <div className="wb-app-shell flex min-h-screen items-center justify-center p-6">
-        <div className="wb-panel max-w-md rounded-lg p-5">
+        <div className="wb-panel max-w-md p-5">
           <div className="text-base font-semibold">Loading...</div>
           <div className="mt-1 text-[13px] text-[var(--wb-text-secondary)]">
             Preparing item catalog, search index, and build state.
@@ -583,77 +582,59 @@ export function App() {
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
       <div className="wb-app-shell flex h-screen flex-col overflow-hidden">
         {/* ─── TopBar ─── */}
-        <header className="flex h-12 shrink-0 items-center gap-1.5 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-2 md:gap-2 md:px-3">
-          {/* Left section */}
+        <header className="flex h-[34px] shrink-0 items-center border-b border-[var(--wb-border)] bg-[var(--wb-surface)] px-2">
+          {/* Left: sidebar toggle + diamond logo + wordmark */}
           <SidebarToggle collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((v) => !v)} side="left" />
-
-          <div className="wb-theme-toggle hidden sm:flex">
-            <span className="wb-theme-toggle-label">Theme</span>
-            {(['dark', 'light'] as const).map((mode) => (
-              <button
-                key={mode}
-                type="button"
-                className="wb-theme-toggle-button"
-                data-active={themeMode === mode ? 'true' : 'false'}
-                onClick={() => setThemeMode(mode)}
-              >
-                {mode === 'dark' ? 'Dark' : 'Light'}
-              </button>
-            ))}
+          <div className="ml-1 mr-3 flex shrink-0 items-center gap-1.5">
+            <div style={{ width: 14, height: 14, border: '2px solid var(--wb-accent)', transform: 'rotate(45deg)', flexShrink: 0 }} />
+            <span className="hidden text-[0.7rem] font-bold uppercase tracking-[0.12em] sm:block">BUILD SOLVER</span>
           </div>
 
-          {abilityTreeEvaluation && (
-            <span className="wb-chip hidden sm:inline-flex" data-tone="success">
-              ATree {abilityTreeEvaluation.apUsed}/{abilityTreeEvaluation.apCap} AP
-            </span>
-          )}
-
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Center: Solver CTAs */}
-          <div className="flex items-center gap-1.5 md:gap-2">
-            <a
-              className="wb-button hidden px-2 py-1 text-[11px] md:inline-flex"
-              data-variant="ghost"
-              href={tutorialUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <CirclePlay size={12} className="mr-1" />
-              How to use
-            </a>
+          {/* Center: tab strip */}
+          <nav className="flex flex-1 items-stretch justify-center">
             <button
               type="button"
-              className="wb-solver-cta flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 md:gap-2 md:px-5 md:py-2.5 md:text-sm"
               onClick={openAutoBuilder}
-              title="Open Build Solver"
-              data-tone="build"
+              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
+              style={{ color: autoBuilderOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: autoBuilderOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
             >
-              <Hammer size={16} className="md:h-[18px] md:w-[18px]" />
-              <span className="hidden sm:inline">Build Solver</span>
+              BUILD
             </button>
             <button
               type="button"
-              className="wb-solver-cta flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-bold transition-all active:scale-95 md:gap-2 md:px-5 md:py-2.5 md:text-sm"
               onClick={openRecipeSolver}
-              title="Open Recipe Solver"
-              data-tone="recipe"
+              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
+              style={{ color: recipeSolverOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: recipeSolverOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
             >
-              <FlaskConical size={16} className="md:h-[18px] md:w-[18px]" />
-              <span className="hidden sm:inline">Recipe Solver</span>
+              RECIPE
             </button>
-          </div>
+            <button
+              type="button"
+              onClick={openAbilityTree}
+              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
+              style={{ color: abilityTreeOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: abilityTreeOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
+            >
+              ATREE
+            </button>
+          </nav>
 
-          {/* Spacer */}
-          <div className="flex-1" />
-
-          {/* Right controls — desktop */}
+          {/* Right: desktop controls */}
           <div className="hidden items-center gap-1.5 md:flex">
+            <div className="flex items-center gap-1">
+              <label className="text-[11px] text-[var(--wb-text-quaternary)]">Lv.</label>
+              <input
+                className="wb-input w-14"
+                type="number"
+                min={1}
+                max={120}
+                value={snapshot.level}
+                onChange={(e) => store.setLevel(Number(e.target.value))}
+              />
+            </div>
             <div className="flex items-center gap-1">
               <label className="text-[11px] text-[var(--wb-text-quaternary)]">Class</label>
               <select
-                className="wb-select w-28"
+                className="wb-select w-24"
                 value={snapshot.characterClass ?? ''}
                 onChange={(e) => store.setCharacterClass((e.target.value || null) as WorkbenchSnapshot['characterClass'])}
               >
@@ -665,21 +646,10 @@ export function App() {
                 <option value="Shaman">Shaman</option>
               </select>
             </div>
-            <div className="flex items-center gap-1">
-              <label className="text-[11px] text-[var(--wb-text-quaternary)]">Lv.</label>
-              <input
-                className="wb-input w-16"
-                type="number"
-                min={1}
-                max={120}
-                value={snapshot.level}
-                onChange={(e) => store.setLevel(Number(e.target.value))}
-              />
-            </div>
             <div className="hidden items-center gap-1 lg:flex">
               <label className="text-[11px] text-[var(--wb-text-quaternary)]">Tomes</label>
               <select
-                className="wb-select w-32"
+                className="wb-select w-28"
                 value={snapshot.skillpointTomeMode ?? 'no_tomes'}
                 onChange={(e) => store.setSkillpointTomeMode((e.target.value || 'no_tomes') as WorkbenchSnapshot['skillpointTomeMode'])}
               >
@@ -688,21 +658,35 @@ export function App() {
                 <option value="flexible_2">+2 Flex</option>
               </select>
             </div>
-
-            <div className="mx-1 h-5 w-px bg-[var(--wb-border-muted)]" />
-
+            <div className="mx-1 h-4 w-px bg-[var(--wb-border-muted)]" />
             <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={() => void shareWorkbench()}>
               <Link2 size={12} className="mr-1" />
               Share
             </Button>
-            <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={openAbilityTree}>
-              <TreePine size={12} className="mr-1" />
-              ATree
-            </Button>
-            <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
+            <div className="wb-theme-toggle">
+              <span className="wb-theme-toggle-label">Theme</span>
+              {(['dark', 'light'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className="wb-theme-toggle-button"
+                  data-active={themeMode === mode ? 'true' : 'false'}
+                  onClick={() => setThemeMode(mode)}
+                >
+                  {mode === 'dark' ? 'Dark' : 'Light'}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Right controls — mobile hamburger */}
+          {/* Version string */}
+          <span className="mx-2 hidden shrink-0 text-[0.5rem] lg:block" style={{ color: 'var(--wb-border)' }}>
+            {catalog.version}
+          </span>
+
+          <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
+
+          {/* Mobile hamburger */}
           <button
             type="button"
             className="wb-icon-button md:hidden"
@@ -715,7 +699,7 @@ export function App() {
 
         {/* ─── Mobile dropdown menu ─── */}
         {mobileMenuOpen && (
-          <div className="flex flex-col gap-2 border-b border-[var(--wb-surface-border)] bg-[var(--wb-surface)] px-3 py-3 md:hidden">
+          <div className="flex flex-col gap-2 border-b border-[var(--wb-border)] bg-[var(--wb-surface)] px-3 py-3 md:hidden">
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex items-center gap-1">
                 <label className="text-[11px] text-[var(--wb-text-quaternary)]">Class</label>
@@ -757,7 +741,7 @@ export function App() {
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="wb-theme-toggle sm:hidden">
+              <div className="wb-theme-toggle">
                 <span className="wb-theme-toggle-label">Theme</span>
                 {(['dark', 'light'] as const).map((mode) => (
                   <button
@@ -775,20 +759,6 @@ export function App() {
                 <Link2 size={12} className="mr-1" />
                 Share
               </Button>
-              <Button variant="ghost" className="px-2 py-1 text-[11px]" onClick={openAbilityTree}>
-                <TreePine size={12} className="mr-1" />
-                ATree
-              </Button>
-              <a
-                className="wb-button px-2 py-1 text-[11px]"
-                data-variant="ghost"
-                href={tutorialUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <CirclePlay size={12} className="mr-1" />
-                How to use
-              </a>
               <SidebarToggle collapsed={statsPanelCollapsed} onToggle={() => setStatsPanelCollapsed((v) => !v)} side="right" />
             </div>
           </div>
