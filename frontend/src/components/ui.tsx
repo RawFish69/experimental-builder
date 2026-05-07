@@ -37,7 +37,7 @@ export function Button(
 
 export function Panel(props: PropsWithChildren<{ className?: string; title?: ReactNode; headerRight?: ReactNode }>) {
   return (
-    <section className={cn('wb-panel rounded-lg', props.className)}>
+    <section className={cn('wb-panel', props.className)}>
       {(props.title || props.headerRight) && (
         <div className="flex items-center justify-between gap-2 border-b border-[var(--wb-border-muted)] px-3 py-2">
           <div className="text-[13px] font-semibold text-[var(--wb-text)]">{props.title}</div>
@@ -193,7 +193,7 @@ export function Kbd(props: PropsWithChildren<{ className?: string }>) {
   return (
     <kbd
       className={cn(
-        'inline-flex items-center rounded border border-[var(--wb-border)] bg-[var(--wb-layer-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--wb-text-tertiary)]',
+        'inline-flex items-center rounded-sm border border-[var(--wb-border)] bg-[var(--wb-layer-2)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--wb-text-tertiary)]',
         props.className,
       )}
     >
