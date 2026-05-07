@@ -32,7 +32,30 @@ The build-solver consumes a subset of those files. Never edit the data files in 
 
 ---
 
-## How to update
+## Automated sync (preferred)
+
+A script handles everything below automatically:
+
+```bash
+# Fetch latest data directly from GitHub (no local clone needed)
+python sync-from-wynnbuilder.py
+
+# When wynnbuilder adds a new version folder (e.g. 2.2.0.25)
+python sync-from-wynnbuilder.py --bump-version 2.2.0.25
+
+# Preview changes without writing
+python sync-from-wynnbuilder.py --dry-run
+
+# Use a local clone instead of fetching from GitHub
+python sync-from-wynnbuilder.py --local ../wynnbuilder-beta.github.io
+```
+
+The script compares Git blob SHAs so it only downloads files that actually changed.
+After running, commit the modified files.
+
+---
+
+## Manual update steps (if needed)
 
 ### 1. Pull the latest from wynnbuilder-beta
 

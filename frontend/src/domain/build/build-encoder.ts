@@ -20,7 +20,7 @@ const B64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+-';
 
 const VECTOR_FLAG = 0xC;   // 6 bits — forces first char > 11
 const VERSION_BITLEN = 10;
-const WYNN_VERSION_LATEST = 26; // index for '2.2.0.12' in wynn_version_names (27 entries, 0-based)
+const WYNN_VERSION_LATEST = 29; // index for '2.2.0.21' in wynn_version_names (30 entries, 0-based)
 
 const EQUIPMENT_KIND_NORMAL = 0;
 const EQUIPMENT_KIND_BITLEN = 2;
