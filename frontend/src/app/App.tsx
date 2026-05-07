@@ -595,24 +595,24 @@ export function App() {
             <button
               type="button"
               onClick={openAutoBuilder}
-              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
-              style={{ color: autoBuilderOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: autoBuilderOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
+              className="wb-nav-tab"
+              data-active={autoBuilderOpen ? 'true' : undefined}
             >
               BUILD
             </button>
             <button
               type="button"
               onClick={openRecipeSolver}
-              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
-              style={{ color: recipeSolverOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: recipeSolverOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
+              className="wb-nav-tab"
+              data-active={recipeSolverOpen ? 'true' : undefined}
             >
               RECIPE
             </button>
             <button
               type="button"
               onClick={openAbilityTree}
-              className="flex h-full items-center px-3 text-[0.6rem] font-medium uppercase tracking-wider transition-colors"
-              style={{ color: abilityTreeOpen ? 'var(--wb-accent)' : 'var(--wb-text-quaternary)', borderBottom: abilityTreeOpen ? '2px solid var(--wb-accent)' : '2px solid transparent' }}
+              className="wb-nav-tab"
+              data-active={abilityTreeOpen ? 'true' : undefined}
             >
               ATREE
             </button>

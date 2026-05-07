@@ -13,26 +13,26 @@
   --font-mono: "Azeret Mono", ui-monospace, monospace;
 
   /* Canvas & Surfaces */
-  --wb-canvas:         #0a0c10;
-  --wb-surface:        #0e1014;
-  --wb-surface-hover:  #111620;
-  --wb-surface-border: #1c2028;
+  --wb-canvas:         #070a0e;
+  --wb-surface:        #0f1318;
+  --wb-surface-hover:  #141c26;
+  --wb-surface-border: #1e2a3a;
 
   /* Layers */
-  --wb-layer-1:       #0b0e12;
-  --wb-layer-1-hover: #0f1318;
-  --wb-layer-2:       #090c10;
-  --wb-layer-2-hover: #0c0f14;
+  --wb-layer-1:       #172030;
+  --wb-layer-1-hover: #1d2a3e;
+  --wb-layer-2:       #0a0d12;
+  --wb-layer-2-hover: #0d1017;
 
   /* Text */
   --wb-text:            #e8e8ec;
   --wb-text-secondary:  #c8d4e0;
-  --wb-text-tertiary:   #5a7080;
-  --wb-text-quaternary: #2a3848;
+  --wb-text-tertiary:   #6a8090;
+  --wb-text-quaternary: #4a6070;
 
   /* Borders */
-  --wb-border:        #1c2028;
-  --wb-border-strong: #2a3848;
+  --wb-border:        #1e2a3a;
+  --wb-border-strong: #2e3e54;
   --wb-border-muted:  #131820;
 
   /* Accent (Amber) */
@@ -89,9 +89,9 @@
   --wb-tier-crafted:   #22d3ee;
 
   /* Buttons */
-  --wb-button-bg:             #0b0e12;
-  --wb-button-hover:          #111620;
-  --wb-button-border:         #1c2028;
+  --wb-button-bg:             #0f1318;
+  --wb-button-hover:          #141c26;
+  --wb-button-border:         #1e2a3a;
   --wb-button-ghost-hover:    rgba(255,255,255,0.05);
   --wb-button-primary-bg:     #f0a030;
   --wb-button-primary-hover:  #f5b050;
@@ -99,9 +99,9 @@
   --wb-button-primary-border: #c07818;
 
   /* Inputs */
-  --wb-input-bg:          #090c10;
-  --wb-input-border:      #1c2028;
-  --wb-input-placeholder: #2a3848;
+  --wb-input-bg:          #0a0d12;
+  --wb-input-border:      #1e2a3a;
+  --wb-input-placeholder: #4a6070;
 
   /* Misc */
   --wb-shadow:    0 4px 16px rgba(0,0,0,0.4);
@@ -132,24 +132,24 @@
 :root[data-wb-theme="light"] {
   color-scheme: light;
 
-  --wb-canvas:         #f0f0f2;
-  --wb-surface:        #e8e8ec;
-  --wb-surface-hover:  #e0e0e6;
-  --wb-surface-border: #d4d4da;
+  --wb-canvas:         #c8cdd8;
+  --wb-surface:        #dde2ec;
+  --wb-surface-hover:  #d5dae4;
+  --wb-surface-border: #c0c6d4;
 
-  --wb-layer-1:       #ffffff;
-  --wb-layer-1-hover: #f8f8fa;
-  --wb-layer-2:       #f0f0f4;
-  --wb-layer-2-hover: #e8e8ee;
+  --wb-layer-1:       #f5f6f9;
+  --wb-layer-1-hover: #eceef4;
+  --wb-layer-2:       #e6eaf2;
+  --wb-layer-2-hover: #dde2ea;
 
   --wb-text:            #0e1014;
   --wb-text-secondary:  #3a4858;
-  --wb-text-tertiary:   #9098a8;
-  --wb-text-quaternary: #c0c8d0;
+  --wb-text-tertiary:   #607084;
+  --wb-text-quaternary: #7888a0;
 
-  --wb-border:        #d4d4da;
-  --wb-border-strong: #b8b8c4;
-  --wb-border-muted:  #e4e4ea;
+  --wb-border:        #c0c6d4;
+  --wb-border-strong: #a8b0c0;
+  --wb-border-muted:  #cdd2dc;
 
   --wb-accent:        #c07818;
   --wb-accent-hover:  #a86010;
@@ -185,18 +185,18 @@
   --wb-tier-normal:    #6b7280;
   --wb-tier-crafted:   #0891b2;
 
-  --wb-button-bg:             #ffffff;
-  --wb-button-hover:          #f0f0f4;
-  --wb-button-border:         #d4d4da;
+  --wb-button-bg:             #f5f6f9;
+  --wb-button-hover:          #eceef4;
+  --wb-button-border:         #c0c6d4;
   --wb-button-ghost-hover:    rgba(0,0,0,0.05);
   --wb-button-primary-bg:     #c07818;
   --wb-button-primary-hover:  #a86010;
   --wb-button-primary-text:   #ffffff;
   --wb-button-primary-border: #a86010;
 
-  --wb-input-bg:          #ffffff;
-  --wb-input-border:      #d4d4da;
-  --wb-input-placeholder: #c0c8d0;
+  --wb-input-bg:          #f5f6f9;
+  --wb-input-border:      #c0c6d4;
+  --wb-input-placeholder: #7888a0;
 
   --wb-shadow:    0 1px 4px rgba(0,0,0,0.08);
   --wb-shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
@@ -680,6 +680,40 @@ a {
   flex: 1;
   height: 1px;
   background: var(--wb-border);
+}
+
+/* ─── Nav tabs (header tab strip) ─── */
+.wb-nav-tab {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  padding: 0 1rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--wb-text-quaternary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-bottom-color 0.15s, background-color 0.15s, text-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.wb-nav-tab:hover {
+  color: var(--wb-text-secondary);
+  background: var(--wb-accent-muted);
+}
+
+.wb-nav-tab[data-active="true"] {
+  color: var(--wb-accent);
+  border-bottom-color: var(--wb-accent);
+  text-shadow: 0 0 12px var(--wb-accent), 0 0 24px rgba(240,160,48,0.35);
+}
+
+.wb-nav-tab[data-active="true"]:hover {
+  background: var(--wb-accent-muted);
 }
 
 /* ─── Ability tree nodes ─── */
